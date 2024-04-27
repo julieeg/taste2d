@@ -58,7 +58,7 @@ mkdir -p chunks ; split -n 30 --numeric-suffixes=10 -a 2 iids chunks/chunk
 
 # Run phasing as an array
 
-qsub -t 10-29 ../scripts/data_prep/supertaster_haplos.sh
+qsub -t 10-39 ../scripts/data_prep/supertaster_haplos.sh
 
 
 
