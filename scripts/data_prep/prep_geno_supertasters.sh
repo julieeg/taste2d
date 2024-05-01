@@ -35,7 +35,7 @@ ${plink2} --bgen ${scratch}/supertaster.bgen ref-first \
 --memory 30000 \
 --out ../data/processed/genos/supertasters/supertasters
 
-mv ../data/processed/genos/supertasters/supertasters.log ./plink2_supertasters_dose.log
+mv ../data/processed/genos/supertasters/supertasters.log ./logs/plink2_supertasters_dose.log
 
 
 

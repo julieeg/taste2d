@@ -47,32 +47,25 @@ mv ../data/temp/supertaster_chunk${i}.log ./logs/plink2_supertaster_chunk${i}.lo
 ${shapeit} \
 --input-bed ../data/temp/supertaster_chunk${i} \
 --input-map ./supertaster_genetic_map \
---output-max ../data/processed/genos/supertasters/chunk${i} \
+--output-max ../data/temp/supertaster_chunk${i} \
 --output-log ./logs/shapeit_supertaster_haplo.log \
 --thread 8
-
-shapeit_27042024_00h47m37s_d4b6e442-dd27-4d68-b68b-a978f53ad17
 
 
 
 # Prepare vcf with 0|1 notation
 
 ${shapeit} -convert \
---input-haps ../data/processed/genos/supertasters/chunk${i}.haps ../data/processed/genos/supertasters/chunk${i}.sample \
---output-vcf ../data/processed/genos/supertasters/chunk${i}.vcf \
+--input-haps ../data/temp/supertaster_chunk${i}.haps ../data/temp/supertaster_chunk${i}.sample \
+--output-vcf ../data/processed/genos/supertasters/supertaster_chunk${i}.vcf \
 --output-log ./logs/shapeit_supertaster_haplos2vcf.log \
 --thread 8
 
 
-# Compile haplos in R
-Rscript --no-save ../scripts/data_prep/supertaster_haplos.R ${i}
-
 
 # Clean data/temp folder
 rm ../data/temp/supertaster_chunk${i}*
-rm ../data/processed/genos/supertasters/chunk${i}.haps
-rm ../data/processed/genos/supertasters/chunk${i}.sample
-rm ../data/processed/genos/supertasters/chunk${i}.vcf
 
 
+#EOF
 

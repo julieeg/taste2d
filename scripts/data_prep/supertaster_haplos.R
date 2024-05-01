@@ -31,6 +31,8 @@ left_join(
       
   fwrite(paste0("../data/processed/genos/supertasters/chunk", i, "_haplos_id.csv"), row.names=F, col.names=T, quote=F)
 
+
+
 #EOF
 
 

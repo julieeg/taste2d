@@ -292,6 +292,6 @@ write_csv(ukb_rm5sd, "../data/working/ukb_eur_unrel_processed_rm5sd.csv")
 saveRDS(ukb_rm5sd, "../data/working/ukb_eur_unrel_processed_rm5sd.rds")
 
 
-#### END OF SYNTAX
+#EOF
 
 

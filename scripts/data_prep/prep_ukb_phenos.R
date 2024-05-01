@@ -466,6 +466,6 @@ str(phenos)
 sink()
 
 
-## END_OF_SYNTAX
+##EOF
 
 
