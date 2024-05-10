@@ -21,6 +21,13 @@ n_pct.fun <- function(x) {
   (sapply(stats.default(x), function(y) with(y, sprintf("%s (%s)", round(FREQ, d=2), round(PCT, 0)))))
 }
 
+n_pct <- function(x, level=F) {
+  if(level==F) {
+    sapply(as.list(names(table(x))), function(lvl) {
+      paste0(lvl, ", ", sum(x == lvl, na.rm=T), " (", round(sum(x == lvl, na.rm=T)/n()*100,1), "%)") }) } 
+  else{paste0(sum(x == level, na.rm=T), " (", round(sum(x == level, na.rm=T)/n()*100,1), "%)")}
+}
+
 
 # 3. Remove outliers by SD
 remove_outliers.fun <- function(x, SDs=5) {

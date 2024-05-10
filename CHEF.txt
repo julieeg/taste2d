@@ -1,0 +1,77 @@
+## CHEF FILE
+
+Last Updated: May 7, 2024
+
+
+=======================================
+
+## INGREDIENTS 
+
+Required packages -----
+
+python3.7        to run a conda environment; required for bgenix
+bgenix           to subset bgen (ukb genotype file format) files 
+plink2.0         to prepare dosage data
+
+
+Environment set up -----
+
+This script requires a conda environment to run bgenix. Commands, below (adapted from the BITs blog), describe how to create & activate an environment ("bgen"), which will be housed in an “opt” folder of the head of the project directory (taste2d/opt). 
+
+# Make opt directory & write .condarc file
+mkdir ../opt
+echo "pkgs_dir:
+- condapkgs" > .condarc
+
+# initiate interactive session & navigate to project directory
+use UGER
+ish -l h_vmem=30G
+use Anaconda3
+cd /humgen/florezlab/users/jgervis/taste2d/
+
+# Create environment & load bengix 
+conda create --prefix=../opt/bgen/ python=3.7
+source activate ../opt/bgen
+conda install -c conda-forge bgenix
+
+
+Required programs ----------
+
+#plink2
+wget -P ../opt/ https://s3.amazonaws.com/plink2-assets/alpha4/plink2_linux_x86_64_20230912.zip #alpha release
+unzip -d ../opt/plink2_linux_x86_64_20230912.zip ../opt/plink2
+
+
+Description of genetics workflow -----------
+
+Haplotype phasing was performed for the 3 variants contributing to the supertaster haplotype on chr 7 at TAS2R38: rs713598, rs1726866, rs10246949 to derive diplotypes
+A raw genotype files in BGEN format with select variants was converted to bfiles (dosage) and cut into 20 chunks (by IID). Using shapeit, each chunk.bfile is converted to chunk.haps, then further converted to chunk.vcf with 0|1 notation. Using R, chunk.vcf is converted to chunk.csv and haplo_0, haplo_1, and diplo are determined.
+
+For the vcf 0|1 format, 0=REF | 1=ALT: rs713598 REF=G|ALT=C, rs1726866 REF=A|ALT=G, rs10246939 REF=C|ALT=T
+Example: for IID=X*****X, haplo_0=GGC, haplo_1=CAT, diplo=GGC/CAT, taster_status=taster
+	#CHROM POS ID REF ALT X*****X (5887344)
+	7 141672604 rs10246939 C T 0|1
+	7 141672705 rs1726866 A G 1|0
+	7 141673345 rs713598 G C 0|1
+
+
+=======================================
+
+## PATH
+florezlab_taste2d=/humgen/florezlab/users/jgervis/taste2d 
+
+## RECIPE
+
+## Prepare ukb phenotypes
+qsub ../scripts/data_prep/prep_ukb_phenos.sh
+
+## Prepare ukb genotypes (supertaster haplotypes + snp dosage)
+qsub ../scripts/data_prep/prep_supertaster_haplos.sh
+for ANC in ALL EUR AFR AMR CSA EAS MID; do qsub -t 10-29 ../scripts/data_prep/run_haplos.sh ${ANC}; done 
+
+## Postprocessing to prepare analytical dataset
+for ANC in ALL EUR AFR AMR CSA EAS MID; do qsub ../scripts/data_prep/postprocess_ukb_data.sh ${ANC}; done 
+
+## Download data to local R
+for ANC in ALL EUR; do rsync -zavP uger:$florezlab_taste2d/data/processed/ukb_analysis_${ANC}.rda ../data/processed/; done
+

@@ -1,0 +1,231 @@
+---
+title: "compare_haplos"
+output: html_document
+date: "2024-05-09"
+---
+
+\n
+
+## R markdown file for genotype comparison between ALL vs. ANC-stratified phasing
+```{r setup, include=F}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE,warning = FALSE, 
+                      fig.path = "../output/phenos_summary/")
+suppressMessages(silent <- lapply(
+  c("tidyverse", "data.table", "knitr", "kableExtra", "paletteer", "gridExtra", "ggpubr"), 
+  library, character.only = TRUE))
+palettes <- list(NatComms=paletteer_d("ggsci::nrc_npg", n=10))
+```
+
+```{r command-args}
+#args = commandArgs(trailingOnly = TRUE)
+ANC = "EUR" #args[1]
+```
+
+```{r inputs}
+ANCs <- c("ALL", ANC)
+
+genotypes <- c("rs713598_G", "rs713598_0", "rs713598_1", "rs1726866_G", "rs1726866_0", "rs1726866_1", "rs10246939_C", "rs10246939_0", "rs10246939_1", "haplo_0", "haplo_1", "diplo", "taster_status")
+bitter_traits <- c("addsalt_freq_QT", "coffee", "tea")
+
+# load basic functions
+source("../scripts/basic_functions.R")
+
+# load data for ALL & ANC
+df <- lapply(ANCs, function(x) {readRDS(paste0("../data/processed/ukb_analysis_", x, ".rda")) %>%
+                select(id, all_of(genotypes), all_of(bitter_traits)) %>% rename_with(~str_c(., ".", x), .cols=-"id")} ) %>%
+  Reduce(function(df1, df2) right_join(df1, df2, by = "id"), .)
+```
+
+
+#### Summarize genotypes by ancestry
+```{r summarise-geno} 
+df %>% select(id, starts_with(genotypes)) %>%
+  mutate(across(starts_with(genotypes), ~ as.character(.))) %>%
+  pivot_longer(-id, names_to = "genotype.anc") %>% separate_wider_delim(genotype.anc, ".", names=c("genotype", "anc")) %>%
+  pivot_wider(names_from=genotype) %>%
+  group_by(anc) %>%
+  reframe(
+    #rs713
+    rs713598_G_0=n_pct(rs713598_G, level="0"),
+    rs713598_G_1=n_pct(rs713598_G, level="1"),
+    rs713598_G_2=n_pct(rs713598_G, level="2"),
+    #rs172
+    rs1726866_G_0=n_pct(rs1726866_G, level="0"),
+    rs1726866_G_1=n_pct(rs1726866_G, level="1"),
+    rs1726866_G_2=n_pct(rs1726866_G, level="2"),
+    #rs172
+    rs10246939_C_0=n_pct(rs10246939_C, level="0"),
+    rs10246939_C_1=n_pct(rs10246939_C, level="1"),
+    rs10246939_C_2=n_pct(rs10246939_C, level="2")) %>% t() %>% kable()
+```
+
+```{r summarise-geno-2}
+df.anc <- df %>% select(id, starts_with(genotypes)) %>%
+  mutate(across(starts_with(genotypes), ~ as.character(.))) %>%
+  pivot_longer(-id, names_to = "genotype.anc") %>% separate_wider_delim(genotype.anc, ".", names=c("genotype", "anc")) %>%
+  pivot_wider(names_from=genotype) %>%
+  group_by(anc) 
+#%>%
+  reframe(
+  #haplo_0
+    haplo_0_CAT=n_pct(haplo_0, level="CAT"),
+    haplo_0_GGC=n_pct(haplo_0, level="GGC"),
+    haplo_0_CAC=n_pct(haplo_0, level="CAC"),
+    haplo_0_CGC=n_pct(haplo_0, level="CGC"),
+    haplo_0_GAC=n_pct(haplo_0, level="GAC"),
+    haplo_0_GAT=n_pct(haplo_0, level="GAT"),
+    #haplo_1
+    haplo_1_CAT=n_pct(haplo_0, level="CAT"),
+    haplo_1_GGC=n_pct(haplo_0, level="GGC"),
+    haplo_1_CAC=n_pct(haplo_0, level="CAC"),
+    haplo_1_CGC=n_pct(haplo_0, level="CGC"),
+    haplo_1_GAC=n_pct(haplo_0, level="GAC"),
+    haplo_1_GAT=n_pct(haplo_0, level="GAT"),
+    #taster-status
+    Taster_Status_Nontaster=n_pct(taster_status, level="Nontaster"),
+    Taster_Status_Taster=n_pct(taster_status, level="Taster"),
+    Taster_Status_Supertaster=n_pct(taster_status, level="Supertaster")) %>%
+  t() %>% kable()
+
+  #LEFT OFF HERE WITH THIS TABE --> NEXT, TABULATE THE SALT STUFF THEN MOVE THE FUCK ON*****
+  
+lapply(as.list(names(table(df$diplo.EUR))) function(lvl) {
+
+  as.data.frame(df.anc %>% reframe("y"=n_pct(diplo, level=lvl)) %>% t() ) %>% mutate("Diplo"=row.names())
+  
+}
+```
+
+```{r match-geno-functions}
+# Compare genotypes between ALL and ANC
+match_geno <- function(var) {
+  df %>% select(starts_with(var)) %>% rename_with(~gsub(".*ALL", "ALL", gsub(paste0(".*",ANC), "ANC", .))) %>%
+  #  mutate(across(c("ALL", "ANC"), ~ifelse(is.na(.),  "xNA", .))) %>%
+    mutate(match=ifelse(ANC == ALL, 1, 0)) %>% group_by(ANC) %>%
+    summarise(Agree=sum(match==1, na.rm=T),
+              Disagree=sum(match==0, na.rm=T)) %>% 
+    filter(!is.na(ANC)) %>%
+    filter(!(Agree < nrow(df)*0.0001 & Disagree < nrow(df)*0.0001))
+}
+
+# function to generate barplot of genotype matching
+plot_match_geno <- function(var) {
+  yscale <- max(match_geno(var)[,2:3])*1.10
+  match_geno(var) %>% pivot_longer(-ANC) %>% 
+    ggplot(aes(x=ANC, y=value, group=name, fill=name)) + ylim(0, yscale) +
+    geom_bar(stat = "identity", position = position_dodge()) + 
+    geom_text(aes(label=value), position=position_dodge(0.8), size=3, vjust=-0.35) +
+    scale_fill_manual(values=c(palettes$NatComms[1:2]),
+                      name=paste("Genotype match: ALL &", ANC)) +
+    ylab("Frequency") + xlab("Genotype") +
+    ggtitle(paste(var)) +
+    theme(axis.text.x = element_text(color = "black", size=10, angle = 35)) +
+    theme(axis.text.y = element_text(color = "black", size=10),
+          legend.text = element_text(color = "black", size = 10),
+          legend.title = element_text(color = "black", size = 12, face = "bold"),
+          legend.position = "top") 
+}
+```
+
+##### Genotype comparison for SNPs
+```{r plot-snps, fig.width=16, fig.height=12}
+ggarrange(
+  plot_match_geno(genotypes[1]), plot_match_geno(genotypes[2]), plot_match_geno(genotypes[3]), 
+  plot_match_geno(genotypes[4]), plot_match_geno(genotypes[5]), plot_match_geno(genotypes[6]),
+  plot_match_geno(genotypes[7]), plot_match_geno(genotypes[8]), plot_match_geno(genotypes[9]),
+  ncol=3, nrow=3, common.legend=T, legend = "top")
+```
+
+##### Genotype comparison for haplotypes
+```{r plot-haplos, fig.width=14, fig.height=6}
+ggarrange(plot_match_geno(genotypes[10]), plot_match_geno(genotypes[11]), 
+          ncol=2, common.legend=T, legend = "top")
+```
+
+##### Genotype comparison for diplotypes
+```{r plot-diplos, fig.width=18, fig.height=6}
+plot_match_geno(genotypes[12]) 
+```
+
+
+##### Genotype comparison for taste diplotypes
+```{r plot-taster, fig.width=10, fig.height=6}
+plot_match_geno(genotypes[13]) 
+```
+
+\n
+\n
+
+### Compare associations with salt intake frequency
+
+```{r compare-salt}
+
+# continuous genotypes
+
+
+
+
+
+# Compare genotypes between ALL and ANC
+match_geno <- function(var) {
+  df %>% select(starts_with(var)) %>% rename_with(~gsub(".*ALL", "ALL", gsub(paste0(".*",ANC), "ANC", .))) %>%
+  #  mutate(across(c("ALL", "ANC"), ~ifelse(is.na(.),  "xNA", .))) %>%
+    mutate(match=ifelse(ANC == ALL, 1, 0)) %>% group_by(ANC) %>%
+    summarise(Agree=sum(match==1, na.rm=T),
+              Disagree=sum(match==0, na.rm=T)) %>% 
+    filter(!is.na(ANC)) %>%
+    filter(!(Agree < nrow(df)*0.0001 & Disagree < nrow(df)*0.0001))
+}
+
+# function to generate barplot of genotype matching
+plot_match_geno <- function(var) {
+  yscale <- max(match_geno(var)[,2:3])*1.10
+  match_geno(var) %>% pivot_longer(-ANC) %>% 
+    ggplot(aes(x=ANC, y=value, group=name, fill=name)) + ylim(0, yscale) +
+    geom_bar(stat = "identity", position = position_dodge()) + 
+    geom_text(aes(label=value), position=position_dodge(0.8), size=3, vjust=-0.35) +
+    scale_fill_manual(values=c(palettes$NatComms[1:2]),
+                      name=paste("Genotype match: ALL &", ANC)) +
+    ylab("Frequency") + xlab("Genotype") +
+    ggtitle(paste(var)) +
+    theme(axis.text.x = element_text(color = "black", size=10, angle = 35)) +
+    theme(axis.text.y = element_text(color = "black", size=10),
+          legend.text = element_text(color = "black", size = 10),
+          legend.title = element_text(color = "black", size = 12, face = "bold"),
+          legend.position = "top") 
+}
+
+df %>% select(starts_with())
+
+
+
+plot(df$rs713598_G_ALL, df$addsalt_freq_QT_ALL)
+
+  
+```
+
+
+
+
+
+##EOF
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

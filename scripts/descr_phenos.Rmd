@@ -1,0 +1,76 @@
+---
+output: html_document
+title: "Phenotype Summary"
+---
+
+```{r setup, include=F}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE,warning = FALSE, 
+                      fig.path = "../output/phenos_summary/")
+suppressMessages(silent <- lapply(
+  c("tidyverse", "data.table", "knitr", "kableExtra", "plaletteer"), 
+  library, character.only = TRUE))
+```
+
+```{r command-args}
+args = commandArgs(trailingOnly = TRUE)
+ANC = "EUR" #args[1]
+```
+
+```{r read-phenos}
+analysis <- readRDS(paste0("../data/processed/ukb_analysis_", ANC, ".rda"))
+dim(analysis)
+```
+
+
+## Exclusion criteria
+
+* Common TAS2R38 diplotype
+* No diabetes (Eastwood algorithm + HbA1c <5.7%)
+* [ANC] genetic ancestry
+* Complete data for glucose, genetic ancestry, covariates
+* Plausible total energy intakes (600-4000 kcal/d)
+
+```{r exclusion-criteria}
+
+summarise_noNA <- function(x, varname, data=analysis) {
+  return((analysis %>% select(c("id", x)) %>% mutate(noNA = ifelse(complete.cases(.), 1, 0)))$noNA) 
+  }
+
+analysis <- analysis %>% 
+  mutate(
+    include_taster_diplotype = ifelse(is.na(taster_status) == T | taster_status == "other", 0, 1),
+    include_t2d_controls = ifelse(!is.na(t2d_case.f)  & t2d_case.f == "Control", 1, 0),
+    include_plausible_kcal = ifelse(TCALS <600 | TCALS > 4800 | is.na(TCALS)==T, 0, 1),
+    include_complete_glu = ifelse((summarise_noNA("glu") == 1 & summarise_noNA("hba1c") == 1), 1, 0),
+    include_complete_agesexgPC = summarise_noNA(c("age", "sex", paste0("gPC", 1:10))),
+    include_complete_fasting = summarise_noNA("fasting_hrs"),
+    include_complete_covars = summarise_noNA(c("age", "sex", paste0("gPC", 1:10), "fasting_hrs", "bmi", 
+                                         "smoke_level.lab", "pa_met_excess_lvl", "alch_freq.lab", "dietPC1", "FIB2CHO")) ) %>%
+  mutate(N_for_primary = ifelse(include_t2d_controls == 1 & include_taster_diplotype == 1 & 
+                                   include_complete_glu == 1 & include_plausible_kcal == 1, 1, 0))
+
+analysis %>%
+  select(id, N_for_primary, starts_with("include_")) %>%
+  pivot_longer(-id, names_to="criterion") %>%
+  group_by(criterion) %>%
+  summarise(Yes = sum(value),
+            No = sum(!value)) %>%
+  setNames(c("Exclusion criterion", "Yes", "No")) %>%
+  kable(caption = "Sample counts for exclusion criteria") %>%
+  kable_styling(full_width = FALSE)
+
+```
+
+
+## Participant descriptive characteristics
+
+```{}
+
+
+
+
+
+
+
+
+

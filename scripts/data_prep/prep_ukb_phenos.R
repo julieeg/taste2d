@@ -1,18 +1,18 @@
-## Gather list of variables in May 2023 pull
-
 # load packages
 library(tidyverse)
 library(data.table)
 
 
-## load basic functions for data preparation & cleaning
+# load basic functions for data preparation & cleaning
 source("../scripts/basic_functions.R")
 
 
 
-########################################
-## Demographic & Lifestyle variables  ##
-########################################
+##############################################
+##  Load demographic & lifestyle variables  ##
+##############################################
+
+print("Preparing basic phenotypes ...")
 
 base_phenos <- fread("/humgen/florezlab/UKBB_app27892/UKBB_app27892_download_BEFORE_aug_2022/ukb10528.tab.gz", 
                       data.table=FALSE, stringsAsFactors=FALSE)
@@ -47,14 +47,13 @@ base_phenos_id <- base_phenos %>%
     meds.lab = descr_label.fun(., "med_mets", med_mets_labs)
     )
 
-
 withdrawn_consent <- scan("/humgen/florezlab/UKBB_app27892/withdraw/withdraw27892_232_14_Nov_2022.txt", what=character())
+
 
 
 ### Education level ---------------------------------------------------
 
 ## Coding based on: Ge T., et al. Cerebral Cortex 2019;29(8): 3471-3481.
-
 educ_level_labs <- list(
   "None of the above" = -7, 
   "Prefer not to answer"= -3, 
@@ -80,6 +79,7 @@ educ_id <- fread("/humgen/florezlab/UKBB_app27892/UKBB_app27892_download_may_202
   )
 
 
+
 ### Alcohol intake frequency -------------------------------------------
 
 alch_freq_labs <- list("Prefer not to answer" = -3, "Daily or almost daily" = 1, 
@@ -95,6 +95,7 @@ alch_freq_id <- fread("/humgen/florezlab/UKBB_app27892/UKBB_app27892_download_au
          alch_freq = f.1558.0.0) %>%
   mutate(alch_freq.lab = descr_label.fun(., "alch_freq", alch_freq_labs),
          alch_freq.num = descr_label.fun(., "alch_freq", alch_num))
+
 
 
 ### Physical Activity -------------------------------------------
@@ -144,17 +145,50 @@ pa_id <- fread("/humgen/florezlab/UKBB_app27892/UKBB_app27892_download_aug_2022/
   select(id, all_of(pa_vars))
 
 
-#### COMBINE all base + covariate variables
+
+### Income level ---------------------------------------------------
+
+income_fields <- c(income = 738)
+income_coding <- c(
+  "1" = "Less than 18,000",
+  "2" = "18,000 to 30,999",
+  "3" = "31,000 to 51,999",
+  "4" = "52,000 to 100,000",
+  "5" = "Greater than 100,000",
+  "-1" = "Do not know",
+  "-3" = "Prefer not to answer"
+)
+
+income_id <- fread("/humgen/florezlab/UKBB_app27892/UKBB_app27892_download_may_2023/ukb672750.tab.gz",
+                   data.table = FALSE, stringsAsFactors = FALSE) 
+income_id <- income_id %>%
+  mutate(income = income_coding[as.character(f.738.0.0)]) %>%
+  select(id=f.eid, income) %>%
+  mutate(income_level = case_when(income == "Do not know" ~ mode(NA),
+                                  income == "Prefer not to answer" ~ as.character(NA),
+                                  income != "Do not know" & income != "Prefer not to answer" ~ as.character(income)))
+
+
+#################
+#### MERGE 1 ####
+#################
+
 phenos_id <- base_phenos_id %>% 
   full_join(educ_id, by = "id") %>%
   full_join(alch_freq_id, by = "id") %>%
-  full_join(pa_id, by = "id")
+  full_join(pa_id, by = "id") %>%
+  full_join(income_id, by = "id")
   
 
+print(paste0("DONE: Basic phenotypes prepared for", nrow(base_phenos_id), " participants"))
 
-##################################
-## Biochemistry & Anthropometry ##
-##################################
+
+
+######################################
+##  Load Biomarker & T2D variables  ##
+######################################
+
+print("Preparing biomarker & T2D phenotypes ...")
 
 ## Biochemical parameters ---------------------------------
 
@@ -173,9 +207,7 @@ biomark_id <- fread("/humgen/florezlab/UKBB_app27892/UKBB_app27892_download_BEFO
 
 
 
-############################################
-## T2D (Eastwood algorithm + HbA1c < 5.7) ##
-############################################
+## T2D (Eastwood algorithm + HbA1c < 5.7) ---------------------------------
 
 t2d <- fread("../data/raw/UKB_Diabetes.csv", data.table=FALSE, stringsAsFactors=FALSE) %>% 
   rename(id = f.eid) %>%
@@ -207,16 +239,31 @@ t2d_id <- t2d %>% mutate(
       as.numeric(t2d_case) == 1 ~ "Case"),
     t2d_age_diagnosis = agedm_ts_or_ni_all
   ) %>%
-  select("id", "t2d_case", "t2d_case.f", "hba1c"="hba1c.30750.NGSP.max", 
+  select("id", "t2d_case", "t2d_case.f", "hba1c_max"="hba1c.30750.NGSP.max", 
          "t2d_med_any", "t2d_age_diagnosis") 
 
 
+print(paste0("DONE: Biochemical & anthropometric phenotypes prepared for ", nrow(t2d_id), " participants: ",
+             "T2D Cases = ",  paste0(table(t2d_id$t2d_case.f))[1], ";",
+            "T2D Controls = ", paste0(table(t2d_id$t2d_case.f))[2]) )
 
-##################################################
-## Diet from FFQs & Nutrient intakes from 24HRR ## 
-##################################################
 
-### Functions to prepare 24HR data across multiple measurements (4/1 year)
+
+#################
+#### MERGE 2 ####
+#################
+
+bmt2d_id <- left_join(biomark_id, t2d_id, by = "id")
+
+
+##################################################################
+##  Load diet variables from FFQs & nutrient intakes from 24HR  ## 
+##################################################################
+
+print("Preparing dietary data ...")
+
+### Functions to prepare 24HR data across multiple measurements (4/1 year) 
+## Adapted with permission from KEW 
 
 fetch_diet_fields <- function(fieldIDs, df, coding=FALSE) {
   # Given a list of fields constituting a food group:
@@ -256,14 +303,15 @@ check_num_valid_24hr <- function(df) {
 }
 
 
-# nutrient variables
+### Nutrient variables -------------------------------------------------
+## Merge "Typical diet yesterday" 
+
 diet_vars <- c("TCALS_raw", "TCALS", "CHO", "CHO_kcal", "CHO_pct", 
                "FAT", "FAT_kcal", "FAT_pct", "MUFA", "SFA", "SFA_pct", "MUFA", 
                "MUFA_pct", "PUFA", "PUFA_pct", "PRO", "PRO_kcal", "PRO_pct", "ALC",
                "FREE_SUGARS", "FIBER",  "GLUCOSE", 
                "CHO2FIB", "CHO2FIB_log", "FIB2CHO", "FIB2CHO_sqrt")
 
-## merge "Typical diet yesterday" with nutrient intake vars 
 diet_id <- left_join(fread("/humgen/florezlab/UKBB_app27892/UKBB_app27892_download_aug_2022/ukb670995.tab.gz", 
                         data.table=FALSE, stringsAsFactors=FALSE),
                       fread("/humgen/florezlab/UKBB_app27892/UKBB_app27892_download_BEFORE_aug_2022/ukb22861.tab.gz",
@@ -319,7 +367,7 @@ diet_id <- left_join(fread("/humgen/florezlab/UKBB_app27892/UKBB_app27892_downlo
   select(id=f.eid, all_of(diet_vars))
 
 
-#### food frequency questionnaires
+#### food frequency questionnaires -------------------------------------
 
 intake_fields <- c(cooked_veg = 1289, raw_veg = 1299,
                    fresh_fruit = 1309, dried_fruit = 1319,
@@ -338,8 +386,7 @@ ffq_fields<-c(intake_fields, freq_fields)
 ffq_vars <- setNames(paste0("f.", ffq_fields, ".0.0"), names(ffq_fields))
 
 
-# function to convert frequency values to servings/day (from KEW)
-
+## function to convert frequency values to servings/day (from KEW)
 ffq_freq_to_sev <- function(x) {
   case_when(  # Data-coding 100377
     x == 5 ~ 1,  # "Once or more daily"
@@ -353,8 +400,7 @@ ffq_freq_to_sev <- function(x) {
 }
 
 
-# function to recode negative values as meaninginful
-
+## function to recode negative values as meaninginful
 neg_to_num <- function(x) {
   #x <- as.double(x) #"double" required to add values with decimals (previously, integer)
   case_when(
@@ -365,7 +411,7 @@ neg_to_num <- function(x) {
 }
 
 
-# compile ffq variables & add total variables    
+## merge ffq variables & add total food groups
 ffq_id <- base_phenos %>% select(id=f.eid, ffq_vars) %>%
   mutate(whole_bread = case_when(
     bread_type == 3 ~ 1,
@@ -381,19 +427,97 @@ ffq_id <- base_phenos %>% select(id=f.eid, ffq_vars) %>%
          bread_intake = bread_intake / 7, # bread intake was provided in slices/week
          cereal_intake = cereal_intake / 7 # cereal intake was provided in bowls/week)
          ) %>%
-  mutate(addsalt)
+  
+  # Add FFQ vars for PCA analysis
+  mutate(
+    bread_type_white_vs_brown_or_whole = case_when(      
+      bread_type == 1 ~ 1, bread_type == 2 | bread_type == 3 | 
+        bread_type == 4 ~ 0, TRUE ~ as.numeric(NA)),
+    milk_type_full_vs_low_or_nonfat = case_when(       
+      milk_type == 1 ~ 1, milk_type == 2 | milk_type == 3 ~ 0, TRUE ~ as.numeric(NA)),
+    milk_type_rare_never_BIN = case_when(
+      milk_type == 6 ~ 1, milk_type != 6 ~ 0, TRUE ~ as.numeric(NA)),
+    spread_type_butter_vs_any_other = case_when(          
+      spread_type == 1 ~ 1, spread_type == 2 | spread_type == 3 ~ 0, TRUE ~ as.numeric(NA)),
+    spread_type_rare_never_BIN = case_when(
+      spread_type == 0 ~ 1, spread_type != 0 ~ 0, TRUE ~ as.numeric(NA)),
+    cereal_type_sugar_vs_any_bran = case_when(
+      cereal_type == 5 ~ 1, cereal_type != 5 ~ 0, TRUE ~ as.numeric(NA)),
+    coffee_type_decaf_vs_regular = case_when(              
+      coffee_type == 1 ~ 1, coffee_type == 2 | coffee_type == 3 | 
+        coffee_type == 4 ~ 0, TRUE ~ as.numeric(NA)),
+    addsalt_freq_QT = addsalt,        # INCLUDE
+    addsalt_always_often_vs_nrs = case_when(
+      addsalt == 3 | addsalt == 4 ~ 1, addsalt == 1 | addsalt == 2 ~ 0, TRUE ~ as.numeric(NA)),
+    hotdrink_temp_hot_or_vhot_vs_warm = case_when(
+      hotdrink_temp == 1  ~ 1, hotdrink_temp == 3 | hotdrink_temp == 2 ~ 0, TRUE ~ as.numeric(NA))
+    )
 
 
-## Combine diet datasets --------------------------------------------------
+## Recode categorical diet variables with descriptive levels
+
+ffq_id <- ffq_id %>% 
+  mutate(
+    bread_type.lab = case_when(
+      bread_type == 1 ~ "White", bread_type == 2 ~ "Brown", bread_type == 3 ~ "Wholemeal/Wholegrain",
+      bread_type == 4 ~ "Other", bread_type == -1 ~ "Do not know", bread_type == -3 ~ "Prefer not to answer",
+      TRUE ~ as.character(NA)),
+    
+    milk_type.lab = case_when(
+      milk_type == 1 ~ "Full cream", milk_type == 2 ~ "Semi-skimmed", milk_type == 3 ~ "Skimmed",
+      milk_type == 4 ~ "Soy", milk_type == 5 ~ "Other", milk_type == 6 ~ "Never/rarely have milk",
+      milk_type == -1 ~ "Do not know", milk_type == -3 ~ "Prefer not to answer", 
+      TRUE ~ as.character(NA)),
+    
+    spread_type.lab = case_when(
+      spread_type == 1 ~ "Butter/spreadable butter", spread_type == 2 ~ "Flora Pro-Active/Benecol",
+      spread_type == 3 ~ "Other spread/margarine", spread_type == 0 ~ "Never/rarely use spread",
+      spread_type == -1 ~ "Do not know", spread_type == -3 ~ "Prefer not to answer"),
+    
+    spread_type_nonbutter.lab = case_when(
+      spread_type_nonbutter == 4 ~ "Soft (tub) margarine", spread_type_nonbutter == 5 ~	"Hard (block) margarine",
+      spread_type_nonbutter == 6 ~ "Olive oil based spread (eg: Bertolli)",
+      spread_type_nonbutter == 7 ~ "Polyunsaturated/sunflower oil based spread (eg: Flora)",
+      spread_type_nonbutter == 2 ~ "Flora Pro-Active or Benecol",
+      spread_type_nonbutter == 8 ~ "Other low or reduced fat spread",
+      spread_type_nonbutter == 9 ~ "Other type of spread/margarine", spread_type_nonbutter == -1 ~	"Do not know",
+      spread_type_nonbutter == -3 ~ "Prefer not to answer"),
+    
+    cereal_type.lab = case_when(
+      cereal_type == 1 ~ "Bran cereal (e.g. All Bran, Branflakes)", cereal_type == 2 ~ "Biscuit cereal (e.g. Weetabix)",
+      cereal_type == 3 ~ "Oat cereal (e.g. Ready Brek, porridge)", cereal_type == 4 ~ "Muesli",
+      cereal_type == 5 ~ "Other (e.g. Cornflakes, Frosties)", cereal_type == -1 ~ "Do not know",
+      cereal_type == -3 ~ "Prefer not to answer"),
+    
+    coffee_type.lab = case_when(
+      coffee_type == 1 ~ "Decaffeinated coffee (any type)", coffee_type == 2 ~ "Instant coffee",
+      coffee_type == 3 ~ "Ground coffee (include espresso, filter etc)", coffee_type == 4 ~ "Other type of coffee",
+      coffee_type == -1 ~ "Do not know", coffee_type == -3 ~ "Prefer not to answer"),
+    
+    addsalt.lab = case_when(
+      addsalt == 1 ~ "Never/Rarely", addsalt == 2 ~ "Sometimes", addsalt == 3 ~ "Often",
+      addsalt == 4 ~ "Always", TRUE ~ as.character(NA)),
+    
+    hotdrink_temp.lab = case_when(
+      hotdrink_temp == 1 ~ "Very hot", hotdrink_temp == 2 ~ "Hot", hotdrink_temp == 3 ~ "Warm",
+      TRUE ~ as.character(NA))
+    )
+
+
+#################
+#### MERGE 2 ####
+#################
 
 diet_all_id <- diet_id %>% 
   left_join(., ffq_id, by = "id") 
 
+print(paste0("Dietary data from UKB FFQs prepared for N = ", nrow(diet_all_id), " participants"))
 
 
-######################
-## genetic ancestry ##
-######################
+
+########################
+##  genetic ancestry  ##
+########################
 
 ### Compile Pan-UKBB genetic PCs (use to create European subset) ------------------------------
 
@@ -407,38 +531,44 @@ anc_rel_id <- fread("/humgen/florezlab/UKBB_app27892/ukbreturn2442/all_pops_non_
   mutate(id=as.integer(id))
 
 
+print("Breakdown of available data by relatedness & ancestry from PanUKBB: ")
+print(table(anc_rel_id$unrelated, anc_rel_id$ancestry))
 
-##############################
-## write PROCESSED datasets ##
-##############################
+
+
+################################
+##  write PROCESSED datasets  ##
+################################
 
 ### Merge phenotypes -------------------------------------------
 
 phenos <- phenos_id %>%
-  left_join(biomark_id, by="id") %>%
-  left_join(t2d_id, by ="id") %>%
+  left_join(bmt2d_id, by="id") %>%
   left_join(diet_all_id, by="id") %>%
   left_join(anc_rel_id, by="id") %>%
   filter(!(id %in% withdrawn_consent)) %>%
   mutate(id = format(id, scientific=FALSE)) 
 
 
-# all participants
+## ALL participants
 phenos %>%
   write_csv("../data/processed/ukb_phenos.csv")
 
+print(head(phenos))
 
-# unrelated subsets
+
+## UNRELATED subsets
 phenos %>%
   filter(unrelated == TRUE) %>%
-  write_csv("../data/processed/ukb_phenos_unrelated.csv")
+  write_csv("../data/processed/ukb_phenos_unrelated_ALL.csv")
 
 # unrelated & by Ancestry
 phenos %>%
   filter(unrelated == TRUE & ancestry == "EUR") %>%
   write_csv("../data/processed/ukb_phenos_unrelated_EUR.csv")
 
- 
+
+## UNRELATED & ANCESTRY subsets 
 phenos %>%
   filter(unrelated == TRUE & ancestry == "AFR") %>%
   write_csv("../data/processed/ukb_phenos_unrelated_AFR.csv")
@@ -460,8 +590,11 @@ phenos %>%
   write_csv("../data/processed/ukb_phenos_unrelated_MID.csv")
 
 
+
+print("Done preparing UKB Phenotype data. Datasets are ready for analysis.")
+
 ## Print Data Dictionary
-sink("../data/processed/ukb_pheno_str.txt")
+sink("../data/processed/ukb_phenos_str.txt")
 str(phenos)
 sink()
 
