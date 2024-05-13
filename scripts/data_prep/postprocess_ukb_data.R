@@ -197,6 +197,7 @@ as.data.frame(diet_pcs$rotation) %>%
   fwrite(paste0("../data/processed/diet/ukb_", ANC, "_dietPCloadings.csv"),col.names=T, row.names=F)
 
 
+print("Done compiling basic phenotypes.")
 
 ###################################
 ## Merge data into ukb_processed ##
@@ -207,17 +208,41 @@ phenos_processed_id <- phenos_id %>%
   left_join(dietPCs_id, by = "id")
 
 
-## write csv ----------
-phenos_processed_id %>% 
-  fwrite(paste0("../data/processed/ukb_analysis_", ANC, ".csv"), col.names=T, row.names=F, na=NA)
+### Exclusion criteria
+#* No diabetes (Eastwood algorithm + HbA1c <5.7%)
+#* Common TAS2R38 diplotype
+#* ANC genetic ancestry
+#* Complete data for glucose, genetic ancestry, covariates
+#* Plausible total energy intakes (600-4000 kcal/d)
+
+# function to identify missingness
+summarise_noNA <- function(x, varname, data=phenos_processed_id) {
+  return((data %>% select(c("id", x)) %>% mutate(noNA = ifelse(complete.cases(.), 1, 0)))$noNA) }
+
+# add indicator variables for exclusion criteria
+phenos_processed_id <- phenos_processed_id %>% 
+  mutate(
+    incl_t2d = ifelse(!is.na(t2d_case.f) & t2d_case.f == "Control", 1, 0),
+    incl_taste = ifelse(is.na(taster_status) == T | taster_status == "Other", 0, 1),
+    incl_compl_glu = ifelse((summarise_noNA("glu") == 1), 1, 0),
+    incl_kcal = ifelse(TCALS <600 | TCALS > 4800 | is.na(TCALS)==T, 0, 1),
+    incl_compl_fast = summarise_noNA("fasting_hrs"),
+    incl_compl_covars = summarise_noNA(c("age", "sex", paste0("gPC", 1:10), "fasting_hrs", "bmi", "smoke_level.lab",
+                                         "pa_met_excess_lvl", "alch_freq.lab", "dietPC1", "FIB2CHO"))) %>%
+  mutate(incl_compl=ifelse(incl_compl_glu==1 & incl_compl_fast==1 & incl_compl_covars==1, 1, 0)) %>%
+  mutate(N_Ancestry = ifelse(ancestry == ANC, 1, 0),
+         N_contrl = incl_t2d,
+         N_contrl_taste = ifelse(incl_t2d==1 & incl_taste==1, 1, 0),
+         N_contrl_taste_kcal = ifelse(incl_t2d==1 & incl_taste==1 & incl_kcal==1, 1,0),
+         N_contrl_taste_kcal_compl = ifelse(incl_t2d==1 & incl_taste==1 & incl_kcal==1 & incl_compl==1, 1,0))
 
 ## save as rda -------------
 saveRDS(phenos_processed_id, file = paste0("../data/processed/ukb_analysis_", ANC, ".rda"))
 
-
 ## Remove continuous outliers with >5SD --------------
 phenos_processed_id %>% 
-  mutate_if(is.numeric, function(x) remove_outliers.fun(x, SDs=5)) %>%
+  mutate(across(c(glu, c(paste0("gPC", 1:10)), TCALS, FIB2CHO, dietPC1), function(x) remove_outliers.fun(x, SDs=5))) %>% 
+  filter(complete.cases(glu, gPC1, gPC2, gPC3, gPC4, gPC5, gPC6, gPC7, gPC8, gPC9, gPC10, TCALS, FIB2CHO, dietPC1)) %>%
   saveRDS(paste0("../data/processed/ukb_analysis_", ANC, "_rm5sd.rda"))
 
 

@@ -73,5 +73,30 @@ for ANC in ALL EUR AFR AMR CSA EAS MID; do qsub -t 10-29 ../scripts/data_prep/ru
 for ANC in ALL EUR AFR AMR CSA EAS MID; do qsub ../scripts/data_prep/postprocess_ukb_data.sh ${ANC}; done 
 
 ## Download data to local R
-for ANC in ALL EUR; do rsync -zavP uger:$florezlab_taste2d/data/processed/ukb_analysis_${ANC}.rda ../data/processed/; done
+for ANC in ALL EUR AFR AMR CSA EAS MID; do rsync -zavP uger:/humgen/florezlab/users/jgervis/taste2d/data/processed/ukb_analysis_${ANC}_rm5sd.rda ../data/processed/; done
+for ANC in ALL EUR AFR AMR CSA EAS MID ; do rsync -zavP uger:/humgen/florezlab/users/jgervis/taste2d/data/processed/diet/ukb_${ANC}_dietPCs.rda ../data/processed/diet; done
+
+## Summarize (local R)
+for ANC in ALL EUR AFR AMR CSA EAS MID; do Rscript --vanilla ../scripts/haplos_check.Rmd ${ANC}; done
+for ANC in ALL EUR AFR AMR CSA EAS MID; do Rscript --vanilla ../scripts/phenos_summary.Rmd ${ANC}; done
+
+## Main regression analysis
+for ANC in ALL EUR AFR AMR CSA EAS MID ; do Rscript --vanilla ../scripts/run_lm_primary.R ${ANC}; done
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
