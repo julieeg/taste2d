@@ -17,8 +17,7 @@ This R markdown file compares genotype determinations when phasing was performed
 ```{r setup, include=F}
 #command args
 args = commandArgs(trailingOnly = TRUE)
-#ANC = "EUR" #args[1]
-ANC = "AFR" #args[1]
+ANC = "EUR" #args[1]
 
 knitr::opts_chunk$set(echo = FALSE, message = FALSE,warning = FALSE, fig.path = paste0("../output/haplos_summary/", ANC, "_"))
 suppressMessages(silent <- lapply(
