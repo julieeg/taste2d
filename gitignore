@@ -12,6 +12,7 @@ doc/*
 # Microsoft Office files
 *.docx
 *.pptx
+*.rda
 
 # Documentation
 doc/*
