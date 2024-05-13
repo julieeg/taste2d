@@ -1,5 +1,6 @@
 # Data and environment files
 data/*
+output/*
 cache/*
 opt/*
 env/*
@@ -12,6 +13,7 @@ doc/*
 # Microsoft Office files
 *.docx
 *.pptx
+*.rda
 
 # Documentation
 doc/*
