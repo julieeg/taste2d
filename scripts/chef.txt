@@ -1,9 +1,48 @@
 ## CHEF FILE
 
-Last Updated: May 7, 2024
+Last Updated: May 13, 2024
+
+## PATH
+florezlab_taste2d=/humgen/florezlab/users/jgervis/taste2d 
+
+## RECIPE
+
+## Prepare ukb phenotypes
+qsub ../scripts/data_prep/prep_ukb_phenos.sh
+
+## Prepare ukb genotypes (supertaster haplotypes + snp dosage)
+qsub ../scripts/data_prep/prep_supertaster_haplos.sh
+qsub -t 10-29 ../scripts/data_prep/run_haplos.sh ALL; done 
+
+## Postprocessing to prepare analytical dataset
+for ANC in ALL EUR AFR AMR CSA EAS MID; do qsub ../scripts/data_prep/postprocess_ukb_data.sh ${ANC}; done 
+
+## Download data to local R
+for ANC in ALL EUR AFR AMR CSA EAS MID; do rsync -zavP uger:/humgen/florezlab/users/jgervis/taste2d/data/processed/ukb_analysis_${ANC}_rm5sd.rda ../data/processed/; done
+for ANC in ALL EUR AFR AMR CSA EAS MID ; do rsync -zavP uger:/humgen/florezlab/users/jgervis/taste2d/data/processed/diet/ukb_${ANC}_dietPCs.rda ../data/processed/diet; done
+
+## Summarize (local R)
+for ANC in ALL EUR AFR AMR CSA EAS MID; do Rscript --vanilla ../scripts/haplos_check.Rmd ${ANC}; done
+for ANC in ALL EUR AFR AMR CSA EAS MID; do Rscript --vanilla ../scripts/phenos_summary.Rmd ${ANC}; done
+
+## Main regression analysis
+for ANC in ALL EUR AFR AMR CSA EAS MID ; do Rscript --vanilla ../scripts/run_lm_primary.R ${ANC}; done
 
 
-=======================================
+
+
+
+
+
+
+
+
+
+
+
+
+
+=====================================================================================================================
 
 ## INGREDIENTS 
 
@@ -57,35 +96,10 @@ Example: for IID=X*****X, haplo_0=GGC, haplo_1=CAT, diplo=GGC/CAT, taster_status
 
 =======================================
 
-## PATH
-florezlab_taste2d=/humgen/florezlab/users/jgervis/taste2d 
 
-## RECIPE
+## NOTES
 
-## Prepare ukb phenotypes
-qsub ../scripts/data_prep/prep_ukb_phenos.sh
-
-## Prepare ukb genotypes (supertaster haplotypes + snp dosage)
-qsub ../scripts/data_prep/prep_supertaster_haplos.sh
-for ANC in ALL EUR AFR AMR CSA EAS MID; do qsub -t 10-29 ../scripts/data_prep/run_haplos.sh ${ANC}; done 
-
-## Postprocessing to prepare analytical dataset
-for ANC in ALL EUR AFR AMR CSA EAS MID; do qsub ../scripts/data_prep/postprocess_ukb_data.sh ${ANC}; done 
-
-## Download data to local R
-for ANC in ALL EUR AFR AMR CSA EAS MID; do rsync -zavP uger:/humgen/florezlab/users/jgervis/taste2d/data/processed/ukb_analysis_${ANC}_rm5sd.rda ../data/processed/; done
-for ANC in ALL EUR AFR AMR CSA EAS MID ; do rsync -zavP uger:/humgen/florezlab/users/jgervis/taste2d/data/processed/diet/ukb_${ANC}_dietPCs.rda ../data/processed/diet; done
-
-## Summarize (local R)
-for ANC in ALL EUR AFR AMR CSA EAS MID; do Rscript --vanilla ../scripts/haplos_check.Rmd ${ANC}; done
-for ANC in ALL EUR AFR AMR CSA EAS MID; do Rscript --vanilla ../scripts/phenos_summary.Rmd ${ANC}; done
-
-## Main regression analysis
-for ANC in ALL EUR AFR AMR CSA EAS MID ; do Rscript --vanilla ../scripts/run_lm_primary.R ${ANC}; done
-
-
-
-
+* Phasing performs better when more data (N and variants) are used --> revise workflow to only phase on the ALL dataset, then subset farther down the pipeline.
 
 
 

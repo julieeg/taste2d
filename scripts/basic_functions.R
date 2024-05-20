@@ -31,6 +31,14 @@ remove_outliers.fun <- function(x, SDs=5) {
 }
 
 
+## Winsorize
+winsorize <- function(x, SDs=4) {
+  bounds <- mean(x, na.rm=T) + SDs * c(-1, 1) * sd(x, na.rm=T)
+  x <- ifelse(x<bounds[1], bounds[1], ifelse(x>bounds[2], bounds[2], x))
+  x
+}
+
+
 ## Calculate zscore
 zscore.fun <- function(x) {
   z<-((x - mean(x, na.rm=T)) / sd(x, na.rm=T))
@@ -38,7 +46,7 @@ zscore.fun <- function(x) {
 }
 
 
-## Median impute for negatie or missing values
+## Median impute for negative or missing values
 median_imp.fun <- function(x) {
   x.new <- ifelse(x == -1 | x == -3 | x == -9 | is.na(x) == T, median(x, na.rm=T), x)
   return(x.new)

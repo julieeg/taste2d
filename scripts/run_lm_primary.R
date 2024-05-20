@@ -5,10 +5,17 @@ library(tidyverse) ; library(data.table)
 args=commandArgs(trailingOnly = T)
 ANC=args[1]
 
+
+palettes <- list(NatComms=paletteer_d("ggsci::nrc_npg", n=10),
+                 HeatMapYlRd=rev(paletteer::paletteer_c("grDevices::heat.colors", n=100)))
+
+
 # load analysis dataframe
 analysis <- readRDS(paste0("../data/processed/ukb_analysis_", ANC, "_rm5sd.rda")) %>% 
   filter(N_contrl_taste_kcal_compl == 1)
 dim(analysis)
+
+
 
 ########################
 ### Primary Analysis ###
