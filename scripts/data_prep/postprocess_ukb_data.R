@@ -17,7 +17,8 @@ source("../scripts/basic_functions.R", echo=F)
 args = commandArgs(trailingOnly=TRUE)
 ANC = args[1]
 
-phenos_anc <- fread(paste0("../data/processed/ukb_phenos_unrelated_", ANC, ".csv"))
+phenos_all <- fread(paste0("../data/processed/ukb_phenos_unrelated_ALL.csv"))
+phenos_anc <- phenos_all %>% filter(ancestry == ANC)
 paste("Procecssing data for", ANC, "subset of N =", nrow(phenos_anc), "unrelated participants")
 
 
@@ -57,11 +58,13 @@ paste("Done making variable groups")
 ######################################
 ##  compile supertaster haplotypes  ##
 ######################################
+
 paste("Compiling supertaster haplotypes & SNP dosage")
+
 
 ## compile haplotype data -------------------------
 
-haplo_names <- paste0(ANC,"_chunk",10:29,".csv")
+haplo_names <- paste0("chunk",10:19,".csv")
 haplo_path <- "../data/processed/supertasters"
 haplos_id <- do.call(rbind.data.frame, lapply(as.list(paste0(haplo_path, "/", haplo_names)), function(file) fread(file)))
 
@@ -87,12 +90,12 @@ genos_id <- haplos_id %>%
   select(-c("rs713598_C", "rs10246939_T"))
 
 
-paste("Done compiling genotype data")
+paste("Done compiling genotype data! ")
 head(genos_id)
 
 
 ## Load & compile ukb phenotype data  -------------------------
-paste("Compiling basic phenotypes")
+paste("Compiling basic phenotypes ... ")
 
 phenos_id <- phenos_anc %>%   
 select("id", all_of(pheno_vars), all_of(gPC_vars), all_of(nutrient_vars), all_of(ffq_vars)) %>%
@@ -188,16 +191,19 @@ diet_pcs <- prcomp(select(vars_for_pca, -id), scale.=T)  # Run PCA
 dietPCs_id <- as.data.frame(cbind(id=vars_for_pca$id, diet_pcs$x))
 colnames(dietPCs_id) <- c("id", paste0("diet", colnames(diet_pcs$x)))
 
-
 # Save diet PCA results as csv (of factor loadings) & .rda (all outputs)
 saveRDS(diet_pcs, file = paste0("../data/processed/diet/ukb_", ANC, "_dietPCs.rda"))
 
-as.data.frame(diet_pcs$rotation) %>% 
-  mutate(diet_var = gsub("_BIN", "", gsub("_QT", "", rownames(.)))) %>% 
-  fwrite(paste0("../data/processed/diet/ukb_", ANC, "_dietPCloadings.csv"),col.names=T, row.names=F)
+diet_id <- left_join(vars_for_pca, dietPCs_id, by = "id")
+
+#as.data.frame(diet_pcs$rotation) %>% 
+#  mutate(diet_var = gsub("_BIN", "", gsub("_QT", "", rownames(.)))) %>% 
+#  fwrite(paste0("../data/processed/diet/ukb_", ANC, "_dietPCloadings.csv"),col.names=T, row.names=F)
 
 
-print("Done compiling basic phenotypes.")
+print("Done compiling basic phenotypes & ancestry-specific diet patterns!")
+
+
 
 ###################################
 ## Merge data into ukb_processed ##
@@ -205,7 +211,7 @@ print("Done compiling basic phenotypes.")
 
 phenos_processed_id <- phenos_id %>%
   left_join(genos_id, by = "id") %>%
-  left_join(dietPCs_id, by = "id")
+  left_join(diet_id, by = "id")
 
 
 ### Exclusion criteria
@@ -236,14 +242,14 @@ phenos_processed_id <- phenos_processed_id %>%
          N_contrl_taste_kcal = ifelse(incl_t2d==1 & incl_taste==1 & incl_kcal==1, 1,0),
          N_contrl_taste_kcal_compl = ifelse(incl_t2d==1 & incl_taste==1 & incl_kcal==1 & incl_compl==1, 1,0))
 
-## save as rda -------------
-saveRDS(phenos_processed_id, file = paste0("../data/processed/ukb_analysis_", ANC, ".rda"))
 
-## Remove continuous outliers with >5SD --------------
+# ===============================================
+## Remove continuous outliers with >5SD 
+# ===============================================
+
 phenos_processed_id %>% 
-  mutate(across(c(glu, c(paste0("gPC", 1:10)), TCALS, FIB2CHO, dietPC1), function(x) remove_outliers.fun(x, SDs=5))) %>% 
-  filter(complete.cases(glu, gPC1, gPC2, gPC3, gPC4, gPC5, gPC6, gPC7, gPC8, gPC9, gPC10, TCALS, FIB2CHO, dietPC1)) %>%
-  saveRDS(paste0("../data/processed/ukb_analysis_", ANC, "_rm5sd.rda"))
-
+  mutate(across(c(glu, hba1c, c(paste0("gPC", 1:10)), bmi, TCALS, FIB2CHO, dietPC1), function(x) remove_outliers.fun(x, SDs=5))) %>% 
+  mutate(include = ifelse(complete.cases(taster_status, glu, gPC1, gPC2, gPC3, gPC4, gPC5, gPC6, gPC7, gPC8, gPC9, gPC10, bmi, TCALS, FIB2CHO, dietPC1),1,0)) %>%
+  saveRDS(paste0("../data/processed/ukb_analysis_", ANC, ".rda"))
 
 #EOF

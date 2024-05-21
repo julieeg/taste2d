@@ -27,6 +27,7 @@ rs10246939" > supertaster_snps
 
 bgenix -g /broad/ukbb/imputed_v3/ukb_imp_chr7_v3.bgen -incl-rsids supertaster_snps > ${scratch}/supertaster.bgen
 
+
 ${plink2} --bgen ${scratch}/supertaster.bgen ref-first \
 --sample /humgen/florezlab/UKBB_app27892/ukb27892_imp_chrAUT_v3_s487395.sample \
 --extract supertaster_snps \

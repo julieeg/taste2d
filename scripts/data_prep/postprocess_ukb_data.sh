@@ -18,3 +18,6 @@ use R-4.1
 
 
 Rscript ../scripts/data_prep/postprocess_ukb_data.R ${ANC}
+
+#EOF
+
