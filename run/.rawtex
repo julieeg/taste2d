@@ -1,0 +1,31 @@
+\hypertarget{Sample Inclusion/Exclusions}{} \bookmark[dest=Sample Inclusion/Exclusions,level=0]{Sample Inclusion/Exclusions}
+\lfoot{\footnotesize none}
+\begingroup12\begin{longtable}{lll}
+\caption{Sample Inclusion/Exclusions}\\
+\toprule
+\multicolumn{1}{c}{}&\multicolumn{2}{c}{Included} \\
+\cmidrule(lr){2-3}
+Inclusion criterion & Yes & No\\
+\hline
+\endfirsthead
+\multicolumn{3}{c}{\tablename~\thetable{}: (continued)}\\\\
+\toprule
+\multicolumn{1}{c}{}&\multicolumn{2}{c}{Included} \\
+\cmidrule(lr){2-3}
+Inclusion criterion & Yes & No\\
+\hline
+\endhead \hline \endfoot \hline
+\endlastfoot
+N\_Ancestry & 362458 &      0 \\
+[2ex]
+N\_contrl & 279805 &  82653 \\
+[2ex]
+N\_contrl\_taste & 160790 & 201668 \\
+[2ex]
+N\_contrl\_taste\_kcal &  65485 & 296973 \\
+[2ex]
+N\_contrl\_taste\_kcal\_compl &  56609 & 305849 \\
+[2ex]
+\end{longtable}
+
+\endgroup
