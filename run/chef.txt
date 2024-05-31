@@ -1,9 +1,10 @@
-## CHEF FILE
+## CHEF FILE for taste2D
 
-Last Updated: May 13, 2024
+Last Updated: May 30, 2024
 
 ## PATH
 florezlab_taste2d=/humgen/florezlab/users/jgervis/taste2d 
+
 
 ## RECIPE
 
@@ -11,17 +12,17 @@ florezlab_taste2d=/humgen/florezlab/users/jgervis/taste2d
 sub ../scripts/data_prep/prep_ukb_phenos.sh
 
 # Prepare ukb genotypes (supertaster haplotypes + snp dosage)
-qsub ../scripts/data_prep/prep_supertaster_haplos.sh
-qsub -t 10-19 ../scripts/data_prep/run_haplos.sh
+qsub ../scripts/data_prep/phasing.sh
 
-#MAKE SURE HAPLOS RE RUN
+
+declare -a anc_arr=("EUR" "AFR" "AMR" "CSA" "EAS" "MID")
 
 # Postprocessing to prepare analytical dataset by ANC
-for ANC in ALL EUR AFR AMR CSA EAS MID; do qsub ../scripts/data_prep/postprocess_ukb_data.sh ${ANC}; done 
+for ANC in "${anc_arr[@]}" ; do qsub ../scripts/data_prep/postprocess_ukb_data.sh ${ANC}; done 
 
 # Download data to local R
-for ANC in ALL EUR AFR AMR CSA EAS MID; do rsync -zavP uger:/humgen/florezlab/users/jgervis/taste2d/data/processed/ukb_analysis_${ANC}_rm5sd.rda ../data/processed/; done
-for ANC in ALL EUR AFR AMR CSA EAS MID ; do rsync -zavP uger:/humgen/florezlab/users/jgervis/taste2d/data/processed/diet/ukb_${ANC}_dietPCs.rda ../data/processed/diet; done
+for ANC in "${anc_arr[@]}" ; do rsync -zavP uger:/humgen/florezlab/users/jgervis/taste2d/data/processed/ukb_analysis_${ANC}.rda ../data/processed/; done
+for ANC in "${anc_arr[@]}" ; do rsync -zavP uger:/humgen/florezlab/users/jgervis/taste2d/data/processed/diet/ukb_${ANC}_dietPCs.rda ../data/processed/diet; done
 
 
 ## Summarize (local R)

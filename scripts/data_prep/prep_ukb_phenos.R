@@ -505,7 +505,7 @@ ffq_id <- ffq_id %>%
 
 
 #################
-#### MERGE 2 ####
+#### MERGE 3 ####
 #################
 
 diet_all_id <- diet_id %>% 
@@ -546,7 +546,7 @@ phenos <- phenos_id %>%
   left_join(bmt2d_id, by="id") %>%
   left_join(diet_all_id, by="id") %>%
   left_join(anc_rel_id, by="id") %>%
-  filter(!(id %in% withdrawn_consent)) %>%
+  filter(!(id %in% withdrawn_consent)) %>% # REMOVE PARTICIPANTS WITH WITHDRAWN CONSENT
   mutate(id = format(id, scientific=FALSE)) 
 
 

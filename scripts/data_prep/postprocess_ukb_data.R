@@ -3,6 +3,7 @@
 # load packages
 library(tidyverse) 
 library(data.table)
+library(vcfR)
 
 # load basic functions
 source("../scripts/basic_functions.R", echo=F)
@@ -17,9 +18,9 @@ source("../scripts/basic_functions.R", echo=F)
 args = commandArgs(trailingOnly=TRUE)
 ANC = args[1]
 
-phenos_all <- fread(paste0("../data/processed/ukb_phenos_unrelated_ALL.csv"))
-phenos_anc <- phenos_all %>% filter(ancestry == ANC)
-paste("Procecssing data for", ANC, "subset of N =", nrow(phenos_anc), "unrelated participants")
+# load phenotype data
+phenos <- fread(paste0("../data/processed/ukb_phenos_unrelated_", ANC, ".csv"))
+paste("Procecssing data for", ANC, "subset of N =", nrow(phenos), "unrelated participants")
 
 
 
@@ -52,7 +53,7 @@ ffq_vars <- c("cooked_veg", "raw_veg", "fresh_fruit", "dried_fruit",
               "hotdrink_temp", "hotdrink_temp_hot_or_vhot_vs_warm")
 
 
-paste("Done making variable groups")
+cat(" \n Done making variable groups. \n ")
 
 
 ######################################
@@ -64,9 +65,7 @@ paste("Compiling supertaster haplotypes & SNP dosage")
 
 ## compile haplotype data -------------------------
 
-haplo_names <- paste0("chunk",10:19,".csv")
-haplo_path <- "../data/processed/supertasters"
-haplos_id <- do.call(rbind.data.frame, lapply(as.list(paste0(haplo_path, "/", haplo_names)), function(file) fread(file)))
+haplos_id <- fread("../data/processed/supertasters/supertaster_phased_haps.csv")
 
 haplos_id <- haplos_id %>%
   mutate(taster_status = case_when(
@@ -97,7 +96,7 @@ head(genos_id)
 ## Load & compile ukb phenotype data  -------------------------
 paste("Compiling basic phenotypes ... ")
 
-phenos_id <- phenos_anc %>%   
+phenos_id <- phenos %>%   
 select("id", all_of(pheno_vars), all_of(gPC_vars), all_of(nutrient_vars), all_of(ffq_vars)) %>%
   mutate(
     sex = case_when(sex == 1 ~ "Male", sex == 0 ~ "Female"),
@@ -162,7 +161,7 @@ select("id", all_of(pheno_vars), all_of(gPC_vars), all_of(nutrient_vars), all_of
 
 # Build diet PCs for diet patterns -------------
 
-vars_for_pca <- phenos_anc %>% select(
+vars_for_pca <- phenos %>% select(
   id,
   cooked_veg_QT=cooked_veg, raw_veg_QT=raw_veg,
   fresh_fruit_QT=fresh_fruit, dried_fruit_QT=dried_fruit, 
@@ -252,4 +251,6 @@ phenos_processed_id %>%
   mutate(include = ifelse(complete.cases(taster_status, glu, gPC1, gPC2, gPC3, gPC4, gPC5, gPC6, gPC7, gPC8, gPC9, gPC10, bmi, TCALS, FIB2CHO, dietPC1),1,0)) %>%
   saveRDS(paste0("../data/processed/ukb_analysis_", ANC, ".rda"))
 
+
+cat("Done compiling ukb_analysis_ANC.rda dataset! ")
 #EOF
