@@ -89,6 +89,28 @@ genos_id <- haplos_id %>%
   select(-c("rs713598_C", "rs10246939_T"))
 
 
+## Recode diplotypes so palindromic heterozygotes are coded the same
+#- example: CAT/GGC AND GGC/CAT are both coded as CAT/GGC
+recode_diplos <- function(diplos) {
+  haplo_pairs <- strsplit(diplos, "/")
+
+  # Sort each pair and then combine them back into a string
+  recoded <- sapply(haplo_pairs, function(pair) {
+    sorted_pair <- sort(pair)
+    paste(sorted_pair, collapse = "/")
+  }) ; return(recoded) 
+}
+
+genos_id <-  genos_id %>% 
+  mutate(diplos_pal=recode_diplos(diplo)) 
+
+# Create variable for common diplotypes
+diplos_common <- which(prop.table(table(genos_id$diplos_pal))>0.001)
+
+genos_id <- genos_id %>% mutate(
+  diplos_common = ifelse(diplos_pal %in% names(diplos_common), diplos_pal, NA)
+)
+
 paste("Done compiling genotype data! ")
 head(genos_id)
 
@@ -116,7 +138,8 @@ select("id", all_of(pheno_vars), all_of(gPC_vars), all_of(nutrient_vars), all_of
     alch_freq.lab = case_when(
       alch_freq.lab == "Prefer not to answer" ~ as.character(NA),
       alch_freq.lab != "Prefer not to answer" ~ as.character(alch_freq.lab),
-      TRUE ~ as.character(NA))) %>% 
+      TRUE ~ as.character(NA)),
+    kcal_plaus = ifelse(TCALS >=600 & TCALS < 4800, TCALS, NA)) %>%
   mutate(
     income_level.lab = factor(income_level.lab, 
                               levels = c("Less than 18,000", "18,000 to 30,999",
@@ -139,7 +162,7 @@ select("id", all_of(pheno_vars), all_of(gPC_vars), all_of(nutrient_vars), all_of
                            levels = c("Daily or almost daily",
                                       "3-4 per week", "1-2 per week", "1-3 per month",
                                       "Special occasions only", "Never")),
-    pa_met_excess_lvl = factor(pa_met_excess_lvl, ordered = T,
+    physact_level = factor(pa_met_excess_lvl, ordered = T,
                                levels = c("Low", "Moderate", "High")),
     tg_log = log(tg),
     hba1c=hba1c_max,
@@ -176,11 +199,17 @@ vars_for_pca <- phenos %>% select(
   coffee_type_decaf_vs_regular_BIN=coffee_type_decaf_vs_regular, coffee_QT=coffee,
   tea_QT=tea, water_QT=water, 
   addsalt_always_often_vs_nrs_BIN=addsalt_always_often_vs_nrs,
-  hotdrink_temp_hot_or_vhot_vs_warm_BIN=hotdrink_temp_hot_or_vhot_vs_warm,
-) %>%
-  mutate(across(where(is.numeric), function(i) remove_outliers.fun(i, SDs=5))) %>%
-  #filter_at(vars(-id), any_vars(!is.na(.))) %>%
-  mutate_at(vars(-id), function(x) ifelse(is.na(x), median(x, na.rm=T), x))  # Median impute
+  hotdrink_temp_hot_or_vhot_vs_warm_BIN=hotdrink_temp_hot_or_vhot_vs_warm) %>%
+  
+  # Replace missing values with medians
+  mutate_at(vars(-id), function(x) ifelse(is.na(x), median(x, na.rm=T), x))  %>% 
+  
+  # Winsorize data to 5 SD
+  mutate(across(where(is.numeric), function(i) winsorize(i, SDs=5))) %>%
+  filter(complete.cases(.)==T)
+
+cat("Dimensions of dietary data \n")
+dim(vars_for_pca)
 
 
 ## Run PCA
@@ -229,28 +258,30 @@ phenos_processed_id <- phenos_processed_id %>%
   mutate(
     incl_t2d = ifelse(!is.na(t2d_case.f) & t2d_case.f == "Control", 1, 0),
     incl_taste = ifelse(is.na(taster_status) == T | taster_status == "Other", 0, 1),
-    incl_compl_glu = ifelse((summarise_noNA("glu") == 1), 1, 0),
-    incl_kcal = ifelse(TCALS <600 | TCALS > 4800 | is.na(TCALS)==T, 0, 1),
-    incl_compl_fast = summarise_noNA("fasting_hrs"),
-    incl_compl_covars = summarise_noNA(c("age", "sex", paste0("gPC", 1:10), "fasting_hrs", "bmi", "smoke_level.lab",
-                                         "pa_met_excess_lvl", "alch_freq.lab", "dietPC1", "FIB2CHO"))) %>%
+    incl_kcal = ifelse(is.na(kcal_plaus)==T, 0, 1),
+    incl_compl_glu = ifelse(is.na(glu)==T, 0, 1),
+    incl_compl_fast = ifelse(is.na(fast_cat)==T, 0, 1)) %>%
+  mutate(
+    incl_compl_covars = summarise_noNA(c("age", "sex", paste0("gPC", 1:10), "bmi", "smoke_level.lab",
+                                 "physact_level", "alch_freq.lab", "dietPC1"))) %>%
   mutate(incl_compl=ifelse(incl_compl_glu==1 & incl_compl_fast==1 & incl_compl_covars==1, 1, 0)) %>%
   mutate(N_Ancestry = ifelse(ancestry == ANC, 1, 0),
          N_contrl = incl_t2d,
-         N_contrl_taste = ifelse(incl_t2d==1 & incl_taste==1, 1, 0),
-         N_contrl_taste_kcal = ifelse(incl_t2d==1 & incl_taste==1 & incl_kcal==1, 1,0),
-         N_contrl_taste_kcal_compl = ifelse(incl_t2d==1 & incl_taste==1 & incl_kcal==1 & incl_compl==1, 1,0))
+         N_contrl_compl = ifelse(incl_t2d==1 & incl_compl == 1, 1, 0),
+         N_contrl_compl_kcal = ifelse(incl_t2d==1 & incl_compl == 1 & incl_kcal==1, 1, 0),
+         N_contrl_compl_kcal_taste = ifelse(incl_t2d==1 & incl_compl == 1 & incl_kcal==1, 1, 0))
 
 
 # ===============================================
-## Remove continuous outliers with >5SD 
+## Compile & save ukb_analysis_ANC.rda
 # ===============================================
 
 phenos_processed_id %>% 
-  mutate(across(c(glu, hba1c, c(paste0("gPC", 1:10)), bmi, TCALS, FIB2CHO, dietPC1), function(x) remove_outliers.fun(x, SDs=5))) %>% 
-  mutate(include = ifelse(complete.cases(taster_status, glu, gPC1, gPC2, gPC3, gPC4, gPC5, gPC6, gPC7, gPC8, gPC9, gPC10, bmi, TCALS, FIB2CHO, dietPC1),1,0)) %>%
   saveRDS(paste0("../data/processed/ukb_analysis_", ANC, ".rda"))
 
 
-cat("Done compiling ukb_analysis_ANC.rda dataset! ")
+cat("Done compiling ukb_analysis_ANC.rda dataset!")
+
 #EOF
+
+

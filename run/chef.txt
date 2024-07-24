@@ -8,48 +8,29 @@ florezlab_taste2d=/humgen/florezlab/users/jgervis/taste2d
 
 ## RECIPE
 
-# Prepare ukb phenotypes
-sub ../scripts/data_prep/prep_ukb_phenos.sh
+# Make variable arrays
+declare -a anc_arr=("EUR" "AFR" "AMR" "CSA" "EAS" "MID")
 
-# Prepare ukb genotypes (supertaster haplotypes + snp dosage)
+
+# Prepare ukb phenotypes & genotypes
+sub ../scripts/data_prep/prep_ukb_phenos.sh
 qsub ../scripts/data_prep/phasing.sh
 
 
-declare -a anc_arr=("EUR" "AFR" "AMR" "CSA" "EAS" "MID")
+# Run postprocessing to prepare analytical dataset by ANC
+for ANC in "${anc_arr[@]}" ; do qsub ../scripts/data_prep/postprocess_ukb_data.sh $ANC; done 
 
-# Postprocessing to prepare analytical dataset by ANC
-for ANC in "${anc_arr[@]}" ; do qsub ../scripts/data_prep/postprocess_ukb_data.sh ${ANC}; done 
-
-# Download data to local R
-for ANC in "${anc_arr[@]}" ; do rsync -zavP uger:/humgen/florezlab/users/jgervis/taste2d/data/processed/ukb_analysis_${ANC}.rda ../data/processed/; done
-for ANC in "${anc_arr[@]}" ; do rsync -zavP uger:/humgen/florezlab/users/jgervis/taste2d/data/processed/diet/ukb_${ANC}_dietPCs.rda ../data/processed/diet; done
+## sync data to local R for analysis
+rsync -aP uger:$florezlab_taste2d/data/processed/"ukb_analysis_*.rda" ../data/processed/
+rsync -aP uger:$florezlab_taste2d/data/processed/diet/"*dietPCs.rda" ../data/processed/diet/
 
 
-## Summarize (local R)
-for ANC in ALL EUR AFR AMR CSA EAS MID; do Rscript --vanilla ../scripts/haplos_check.Rmd ${ANC}; done
-for ANC in ALL EUR AFR AMR CSA EAS MID; do Rscript --vanilla ../scripts/phenos_summary.Rmd ${ANC}; done
+# Primary lm analysis 
+for ANC in "${anc_arr[@]}" ; do Rscript ../scripts/analysis/run_lm_primary.R $ANC; done 
+
 
 ## Main regression analysis
 for ANC in ALL EUR AFR AMR CSA EAS MID ; do Rscript --vanilla ../scripts/run_lm_primary.R ${ANC}; done
-
-
-
-##OOC
-
-# run phasing, subsetting to EUR with complete dietary data (to // v0.0)
-# from v1: cat ../data/working/ukb_pheno_unrelated_EUR_rmsd4.csv | awk -F ',' '{if (NR>1) {print $1} }' > ../support/ukb_phenos_sampleIDs
-
-cp ../../../taste2D_v1/support/ukb_samples_with_diet.sample ./
-split --lines=36201 -d ../support/ukb_samples_with_diet.sample .chunks/samples 
-
-# Create bfile of supertaster SNPs
-../opt/plink2 \
---bgen /broad/hptmp/gervis/supertaster.bgen ref-first \
---sample /humgen/florezlab/UKBB_app27892/ukb27892_imp_chrAUT_v3_s487395.sample \
---keep ukb_samples_with_diet.sample \
---make-bfile \
---memory 5000 \
---out ../data/processed/supertasters/test_eur_diet
 
 
 

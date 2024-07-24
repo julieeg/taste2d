@@ -1,0 +1,482 @@
+---
+title: "phenos_summary"
+output: html_document
+date: "2024-06-13"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F)
+
+lapply(c("tidyverse", "data.table", "paletteer", "ggpubr",
+         "R3port", "xtable", "knitr", "tinytex"),  library, character.only = TRUE)
+
+source("../scripts/pantry.R", echo=F)
+
+
+## command args
+#args <- commandArgs(trailingOnly = TRUE)
+#ANC=args[1]
+
+```
+
+
+```{r cars}
+
+###############################
+##   Load data by ancestry   ##
+###############################
+
+# system arguments
+#args = commandArgs(trailingOnly=TRUE)
+ANCs = c("European"="EUR", "African"="AFR", "Admixed American"="AMR", "Central/South Asian"="CSA", 
+         "East Asian"="EAS", "Middle Eastern"="MID")
+ANCs.all = c("European"="EUR", "African"="AFR", "Admixed American"="AMR", "Central/South Asian"="CSA", 
+         "East Asian"="EAS", "Middle Eastern"="MID", "All Ancestries"="ALL")
+
+#load data by ancestry
+analysis_all.l <- lapply(ANCs.all, function(ANC) {
+  readRDS(paste0("../data/processed/ukb_analysis_", ANC, ".rda")) %>%
+    filter(N_contrl == 1) %>%
+  mutate(taster_status = factor(taster_status, levels=c("Nontaster", "Taster","Supertaster", "Other"))) 
+}) ; names(analysis_all.l) <- ANCs.all
+analysis.l <- analysis_all.l[1:6]
+
+#load dietPCs by ancestry
+dietPC_rot.l <-lapply(ANCs, function(ANC) {
+  readRDS(paste0("../data/processed/diet/ukb_", ANC, "_dietPCs.rda"))
+}) ; names(dietPC_rot.l)<-ANCs
+
+
+# N per ANC total sample
+sapply(analysis_all.l, function(dat) dat %>% nrow()) %>% as.data.frame()
+
+```
+
+
+# ===================================================================
+### Inclusion/Exclusion criteria
+# * No diabetes data (Eastwood algorithm + HbA1c <5.7%)
+# * Complete data for glucose, genetic ancestry, and behavioral/SES covariates
+
+## Planned sensitivity analysis
+# * Restrict to individuals with plausible total energy intakes (600-4000 kcal/d)
+# ===================================================================
+
+```{r incl-anc}
+
+# Sample inclusions by ANC
+sapply(analysis.l, function(dat) dat %>% select(starts_with("N_")) %>% 
+         reframe(N_Ancestry=n_pct(N_Ancestry, level="1"),
+                 N_contrl=n_pct(N_contrl, level="1"),
+                 N_contrl_compl=n_pct(N_contrl_compl, level="1"),
+                 N_contrl_compl_kcal=n_pct(N_contrl_compl_kcal, level="1"),
+                 N_contrl_compl_kcal_taste=n_pct(N_contrl_compl_kcal_taste, level="1"))
+) %>% write.csv("../output/ST_NbyAnc.csv")
+
+# Taster status by ANC in included (analytical) sample
+sapply(analysis.l, function(dat) dat %>% select(taster_status) %>% table()) %>% t() %>%
+  write.csv("../output/ST_NbyAnc_taster_status.csv")
+
+```
+
+# =======================
+## TAS2R38 Haplotypes 
+# =======================
+
+```{r haplos}
+
+geno_to_aa.fun <- function(ANC) {
+  anc <- analysis_all.l[[ANC]]
+  haplo_aa <- anc %>% 
+    mutate(across(c("haplo_0", "haplo_1"), ~factor(
+      gsub("CAT", "AVI", gsub("CAC", "AVV", gsub("CGT", "AAI", gsub("CGC", "AAV", gsub("CAV", "AVI",gsub("GGC", "PAV", gsub("GGT", "PAI", gsub("GAT", "PVI", gsub("GAC", "PVV", haplo_0)))))))))))) %>% 
+    select(id, haplo_0, haplo_1)
+  names(haplo_aa) <- c("id", "haplo_0_aa", "haplo_1_aa")
+  return(haplo_aa)
+}
+
+## Add haplo_0_aa and haplo_1_aa to analysis.l dataframe list
+analysis_all.l <- lapply(ANCs.all, function(ANC) analysis_all.l[[ANC]] %>% left_join(geno_to_aa.fun(ANC), by = "id"))
+names(analysis_all.l)<-ANCs.all
+
+## Summarize by ANC
+sapply(analysis_all.l, function(ANC) ANC %>% select(id, haplo_0_aa, haplo_1_aa) %>%
+         pivot_longer(-id, values_to="haplo") %>%
+         reframe(
+           PAV=n_pct(haplo, level="PAV", d=1),
+           AVI=n_pct(haplo, level="AVI", d=1),
+           AAV=n_pct(haplo, level="AAV", d=2),
+           AVV=n_pct(haplo, level="AVV", d=2),
+           PAI=n_pct(haplo, level="PAI", d=2),
+           PVI=n_pct(haplo, level="PVI", d=2),
+           AAI=n_pct(haplo, level="AAI", d=2),
+           PVV=n_pct(haplo, level="PVV", d=2)) %>%
+         t()) %>% 
+  write.csv("../output/tab_HaplosByAnc_AA.csv")
+
+```
+
+# ======================================
+# TAS2R38 diplotypes 
+# ======================================
+
+```{r diplos, fig.asp=0.55, out.height="50%", out.width="75%", warning=F}
+
+summarise_Diplo.fun <- function(ANC) {
+  anc <- analysis.l[[ANC]]
+  # gather diplotypes with >0.05% frequency
+  which(prop.table(table(anc$diplos_pal))*100>0.05)
+  # Add yscale: yscale <- max(prop.table(table(anc$diplos_pal))*100)*1.15
+  ancDiplo <- anc %>% 
+    filter(incl_t2d==1 & incl_compl==1) %>%
+    reframe(n=table(diplos_pal), pct=prop.table(table(diplos_pal)), diplos_pal=names(table(diplos_pal))) %>%
+    arrange(-n) %>% 
+    filter(pct>0.0005) %>%
+    mutate(
+      color = factor(ifelse(diplos_pal == "CAT/CAT", "Nontaster",
+                     ifelse(diplos_pal %in% c("CAT/GGC", "GGC/CAT"), "Taster",
+                            ifelse(diplos_pal == "GGC/GGC", "Supertaster", "Other"))),
+                     levels=c("Nontaster","Taster","Supertaster","Other"))) %>%
+    mutate(diplos_order=factor(diplos_pal, levels=diplos_pal[order(n, decreasing=T)])) %>%
+    mutate(diplos_pal_AA=factor(gsub("CAT", "AVI", gsub("CAC", "AVV", gsub("CGT", "AAI", gsub("CGC", "AAV", gsub("CAV", "AVI",
+              gsub("GGC", "PAV", gsub("GGT", "PAI", gsub("GAT", "PVI", gsub("GAC", "PVV", diplos_order))))))))))) %>%
+    mutate(diplos_order_AA=factor(diplos_pal_AA, levels=diplos_pal_AA[order(n, decreasing=T)])) %>%
+    mutate(Ancestry=rep(paste0(ANC), nrow(.)), .before=n)
+  return(ancDiplo)
+}
+
+
+## Gather diplos over all ancestry groups
+diploByanc <- do.call(rbind.data.frame, lapply(ANCs, summarise_Diplo.fun)) %>%
+  mutate(Ancestry = factor(Ancestry, levels = ANCs, labels=names(ANCs)))
+
+## Panel plot of diplotype distributions by anvestry group
+## **toggle to plot genotypes or AAs **
+
+plot_diploByanc_AA <- diploByanc %>%
+  ggplot(aes(x=diplos_order_AA, y=pct*100, fill=color)) + 
+  facet_wrap(~Ancestry, scales="free_x") + 
+  geom_bar(stat = "identity") + 
+  scale_x_discrete(name = "\n TAS2R38 Diplotypes") +
+  scale_y_continuous(limits=c(0,52), breaks=seq(0,50,10)) +
+  ylab("Frequency (%)") + 
+  scale_fill_manual(values = palettes$taster_labs, name="TAS2R38 Diplotypes") + 
+  ggtheme +
+    theme(axis.text.x = element_text(size=5.5, angle=25, hjust=1, color = "black"),
+          axis.text.y = element_text(size=6.5, color = "black"),
+          axis.title = element_text(color = "black", face = "bold"),
+          legend.position = "bottom") +
+    geom_text(aes(label=n), vjust=-0.15, size=2)
+    #ggtitle(paste0(ANC, " (N = ", nrow(analysis_rda.l[[ANC]]), ")"))
+
+plot_diploByanc_AA %>% ggsave(filename="../output/plot_diploByanc_AA.pdf", height = 5, width=8.5)
+
+
+```
+
+# ============================================================================================================
+## Next we examined diet traits among TAS2R38 diplotypes to identify the diplotype corresponding to the 
+# most sensitive bitter taste receptor (i.e., the Supertaster diplotype). We theorized that, given the 
+# differences in TAS2R38 genotype and allelic distributions, it could differ by ancestrty group.
+## --> How do TAs2R38 diplotypes associate with dietary patterns; and is this different by ancestry group?
+# ============================================================================================================
+
+## The top diet trait associted with TAS2R38 was added salt frequency (Cole et al.) so we looked at
+## associations of added salt with TAS2R38 diplotypes across ancestry groups
+
+
+```{r, fig.asp=0.55}
+
+bitter_foods <- list("Salt"="addsalt_freq_QT", "Coffee" = "coffee_QT", "Tea"="tea_QT", "Alcohol"="ALC", "Vegetable"="raw_veg_QT")
+
+## Run lm (with age, sex, 10 gPC adjustment) for common diplotypes with select bitter traits; then with overall dietPCs
+
+## Salt frequency
+tab_bfood_anc.df <- do.call(rbind, lapply(ANCs, function(ANC) {
+  do.call(rbind.data.frame, lapply(1:length(bitter_foods), function(i) {
+    as.data.frame(print_lm("diplos_common", bitter_foods[[i]], base_covariates_format, label = paste0(names(bitter_foods)[i]), data=analysis.l[[ANC]]) ) %>%
+      mutate(food=rep(names(bitter_foods)[i], nrow(.), .before=beta))
+    })) %>%
+    mutate(ancestry = rep(ANC, nrow(.)))
+})) %>%  mutate(diplo = gsub(".*[_]", "", rownames(.)))
+
+
+## Plot
+plot_salt_anc <- tab_bfood_anc.df %>%
+  mutate(beta=ifelse(is.na(beta), 0, beta),
+         se=ifelse(is.na(se), 0, se)) %>%
+  mutate(ancestry=factor(ancestry, levels=ANCs),
+         lowci=beta-1.96*se, upci=beta+1.96*se) %>%
+  
+  filter(food == "Salt") %>%
+  ggplot(aes(y=diplo, x=beta, xmin=lowci, xmax=upci, color=diplo)) + 
+  facet_wrap(~ancestry, scales = "free_x", nrow=1) +
+  geom_vline(xintercept = 0, color="black", linewidth=0.15) +
+  geom_point(size=0.85, position=position_dodge(0.55)) + 
+  geom_errorbarh(linewidth=0.35, height=0.25, position=position_dodge(0.75)) + 
+  ggtheme + ylab("") + xlab("Beta (95% CI) vs. CAT/CAT (Nontasters)") +
+  theme(legend.position = "bottom",
+        axis.text.y=element_text(size=6)) + 
+  scale_color_manual(values=palettes$diplo_cols)
+plot_salt_anc %>% ggsave(filename="../output/plot_dietcomp_saltByanc.pdf", height=4, width=6)
+
+
+# Coffee/Tea
+plot_coftea_anc <- tab_bfood_anc.df %>%
+  mutate(beta=ifelse(is.na(beta), 0, beta),
+         se=ifelse(is.na(se), 0, se)) %>%
+  mutate(ancestry=factor(ancestry, levels=ANCs),
+         lowci=beta-1.96*se, upci=beta+1.96*se) %>%
+  filter(food == "Coffee") %>%
+  ggplot(aes(y=diplo, x=beta, xmin=lowci, xmax=upci, color=diplo)) + 
+  facet_wrap(~ancestry, scales = "free_x", nrow=1) +
+  geom_vline(xintercept = 0, color="black", linewidth=0.15) +
+  geom_point(size=0.85, position=position_stack(0.55)) + 
+  geom_errorbarh(linewidth=0.35, height=0.25, position=position_stack(0.75)) + 
+  ggtheme + ylab("") + xlab("Beta (95% CI) vs. CAT/CAT (Nontasters)") +
+  theme(legend.position = "bottom", axis.text.y=element_text(size=6)) + 
+  scale_color_manual(values=palettes$diplo_cols)
+plot_coftea_anc
+
+
+## Salt frequency
+dietPCs <- c(paste0("dietPC", 1:10))
+names(dietPCs) <- paste0("Diet PC", 1:10)
+tab_dPC_anc.df <- do.call(rbind, lapply(ANCs, function(ANC) {
+  do.call(rbind.data.frame, lapply(1:length(dietPCs), function(i) {
+    as.data.frame(print_lm("diplos_common", dietPCs[[i]], base_covariates_format, label = paste0(names(dietPCs)[i]), data=analysis.l[[ANC]]) ) %>%
+      mutate(food=rep(names(dietPCs)[i], nrow(.), .before=beta))
+    })) %>%
+    mutate(ancestry = rep(ANC, nrow(.)))
+})) %>%  mutate(diplo = gsub(".*[_]", "", rownames(.)))
+
+
+
+# Coffee/Tea
+plot_diet_anc <- tab_bfood_anc.df %>%
+  mutate(beta=ifelse(is.na(beta), 0, beta),
+         se=ifelse(is.na(se), 0, se)) %>%
+  mutate(ancestry=factor(ancestry, levels=ANCs),
+         lowci=beta-1.96*se, upci=beta+1.96*se) %>%
+  filter(food == "Coffee") %>%
+  ggplot(aes(y=diplo, x=beta, xmin=lowci, xmax=upci, color=diplo)) + 
+  facet_wrap(~ancestry, scales = "free_x", nrow=1) +
+  geom_vline(xintercept = 0, color="black", linewidth=0.15) +
+  geom_point(size=0.85, position=position_stack(0.55)) + 
+  geom_errorbarh(linewidth=0.35, height=0.25, position=position_stack(0.75)) + 
+  ggtheme + ylab("") + xlab("Beta (95% CI) vs. CAT/CAT (Nontasters)") +
+  theme(legend.position = "bottom", axis.text.y=element_text(size=6)) + 
+  scale_color_manual(values=palettes$diplo_cols)
+plot_coftea_anc
+
+
+
+
+```
+
+```{r}
+  ## Examine vegetables, fruits, coffee, tea, added salt by TAS2R38 diplotype
+
+diplos_salt.l <- lapply(analysis.l, function(ANC) {
+  mod <- lm(formula(paste0("addsalt_freq_QT~diplos_common+", base_covariates_format)), data=ANC)
+  mod.aov <- aov(m)
+  return(list(mod=summary(mod), aov=mod.aov, tukey=TukeyHSD(mod.aov, "diplos_common")))
+}) 
+
+
+
+```
+
+## Start by examining associations of TAS2R38 diplotyes with bitter-related diet traits: coffee, tea, added salt frequency, vegetable intake
+
+```{r, fig.width=8, fig.height=5, fig.asp=0.35}
+
+
+tab_bfood_msd_byAnc.l <- do.call(rbind.data.frame, lapply(ANCs, function(ANC) {
+  do.call(rbind.data.frame, lapply(bitter_foods, function(food) {
+    analysis.l[[ANC]] %>% group_by(diplos_common) %>%
+      select(diplos_common, var=food[[1]]) %>%
+      reframe(n=n(),
+              mean=mean(var, na.rm=T),
+              se=sd(var, na.rm=T)/sqrt(n())) %>% 
+      mutate(ancestry = rep(ANC, nrow(.)), food=rep(food, nrow(.)), .before=mean) %>%
+      mutate(diplos_common=factor(diplos_common, levels=diplos_common[order(n, decreasing=T)])) 
+    }) )})) %>%
+  mutate(lowCI=mean-1.96*se, upCI=mean+1.96*se)
+  
+tab_bfood_msd_byAnc.l %>%
+  filter(food == "addsalt_freq_QT", complete.cases(diplos_common)) %>%
+  mutate(ancestry=factor(ancestry, levels=ANCs)) %>%
+  ggplot(aes(y=diplos_common, x=mean, xmin=lowCI, xmax=upCI, color=food)) + 
+  facet_grid(~ancestry, scales="free_x") + 
+  theme(axis.text.y = element_text(size=6, color="black")) + 
+  geom_point(size=0.75) + 
+  geom_errorbarh(height=0.35, linewidth=0.25)
+
+
+
+(as.data.framediplos_salt.l$EUR$mod$coefficients) %>%
+  mutate(diplo=gsub("diplos_common", "", rownames()))
+
+
+```
+
+
+
+```{r dietpCs, out.width="90%", fig.height=8, fig.width=10}
+base_covariates = c("age", "sex", paste0("gPC", 1:10))
+base_covariates_format = paste0(base_covariates, collapse = "+")
+
+
+diplos_coffee.l <- lapply(analysis.l, function(ANC) {
+  mod <- lm(formula(paste0("coffee~diplos_common+", base_covariates_format)), data=ANC)
+  mod.aov <- aov(m)
+  return(list(mod=summary(mod), aov=mod.aov, tukey=TukeyHSD(mod.aov, "diplos_common")))
+}) 
+
+diplos_tea.l <- lapply(analysis.l, function(ANC) {
+  mod <- lm(formula(paste0("tea~diplos_common+", base_covariates_format)), data=ANC)
+  mod.aov <- aov(m)
+  return(list(mod=summary(mod), aov=mod.aov, tukey=TukeyHSD(mod.aov, "diplos_common")))
+}) 
+
+
+
+
+## Summarize UKB diet intakes by diplotype for each ancestry
+
+
+
+plot_dietPC_waterfall.fun <- function(ANC, nPCs=10) {
+  as.data.frame(dietPC_rot.l[[ANC]]$rotation) %>%
+    mutate(Diet=diet_labels[gsub("_QT", "", gsub("_BIN", "", rownames(.)))]) %>%
+    select(Diet, c(paste0("PC", 1:nPCs))) %>%
+    mutate(Diet=factor(Diet, levels=Diet[order(PC1, decreasing=T)])) %>%
+    pivot_longer(-Diet) %>% 
+    mutate(name=factor(name, levels=c(paste0("PC", 1:10)) )) %>%
+    mutate(name=gsub("PC", "Diet Pattern PC", name)) %>%
+    mutate(direction = factor(ifelse(value>0.2, "Positive/Major", ifelse(value<0.2 & value>0, "Positive/Minor", 
+                                     ifelse(value<0 & value>-0.2, "Negative/Minor", "Negative/Major"))),
+                              levels=c("Positive/Major", "Positive/Minor", "Negative/Minor", "Negative/Major"))) %>%
+    ggplot(aes(x=value, y=Diet, fill=direction)) + 
+    facet_wrap(~name, ncol=nPCs) + 
+    geom_col() + ylab("") + xlab("Rotated Factor Loadings") +
+    geom_vline(xintercept = c(-0.2, 0.2), color = "black", linetype = "dashed") +
+    geom_vline(xintercept = 0, color = "black") +
+    scale_fill_manual(values=c(palettes$NatComms[c(1,5,6,4)]), name = "Factor Loadings") +
+    ggtheme_waterfall
+}
+
+plot_dPCs_anc.l <- lapply(ANCs, plot_dietPC_waterfall.fun, nPCs=10)
+
+ggarrange(
+  plot_dPCs_anc.l[[1]], plot_dPCs_anc.l[[2]], plot_dPCs_anc.l[[3]], plot_dPCs_anc.l[[4]], plot_dPCs_anc.l[[5]], plot_dPCs_anc.l[[6]], 
+  nrow=6, common.legend = T) %>%
+  ggsave(filename="../output/plot_dPCbyAnc_top10.pdf", height=20, width=12)
+
+```
+
+
+```{r compare-PC1}
+
+dPCs_byAnc <- do.call(rbind.data.frame,  lapply(ANCs, function(ANC) as.data.frame(dietPC_rot.l[[ANC]]$rotation) %>%
+                                    mutate(Ancestry = rep(ANC, nrow(.)), .before=PC1))) %>%
+    mutate(Diet=diet_labels[gsub(".*[.]", "", gsub("_QT", "", gsub("_BIN", "", rownames(.))))], .before=PC1)
+eurPC1=dPCs_byAnc %>% filter(Ancestry=="EUR") %>% arrange(PC1, decreasing=T) %>% select(Diet)
+
+# Plot comparison of diet PC1 across ancestry groups
+plot_dPC1byAnc <- dPCs_byAnc %>%
+  mutate(Diet=factor(Diet, levels=eurPC1$Diet)) %>%
+  pivot_longer(-c(Diet, Ancestry), names_to="dPC") %>% 
+  filter(dPC == "PC1") %>%
+  mutate(dPC=gsub("PC", "Diet Pattern PC", dPC)) %>%
+  mutate(direction = factor(ifelse(value>0.2, "Positive/Major", 
+                                   ifelse(value<0.2 & value>0, "Positive/Minor", 
+                                          ifelse(value<0 & value>-0.2, "Negative/Minor", "Negative/Major"))),
+                            levels=c("Positive/Major", "Positive/Minor", "Negative/Minor", "Negative/Major"))) %>%
+  mutate(Ancestry=factor(Ancestry, levels=c(ANCs))) %>%
+  #rowwise() %>%
+  #mutate(Ancestry = factor(names(which(ANCs == Ancestry)), levels=c(names(ANCs)))) %>%
+  
+  ggplot(aes(x=value, y=Diet, fill=direction)) + 
+  facet_wrap(~Ancestry, ncol=6) + 
+  geom_col() + ylab("") + xlab("Rotated Factor Loadings") +
+  geom_vline(xintercept = c(-0.2, 0.2), color = "black", linetype = "dashed") +
+  geom_vline(xintercept = 0, color = "black") +
+  scale_fill_manual(values=c(palettes$NatComms[c(1,5,6,4)]), name = "Factor Loadings") +
+  ggtheme_waterfall 
+  
+plot_dPC1byAnc %>% ggsave(filename="../output/plot_dPC1_byAnc.pdf", height=3, width=6)
+
+```
+
+```{r descr-taste}
+
+## Demographic, behavioral & risk factors
+tabl_descr_basic.fun <- function(ANC) {
+  as.data.frame(analysis_rda.l[[ANC]] %>% 
+                  filter(incl_t2d==1, incl_kcal==1, incl_compl==1) %>%
+  filter(complete.cases(taster_status)) %>%
+  group_by(diplo) %>%
+  reframe(
+    Age=mean_sd(age,d=1),
+    Female=n_pct(sex, level = "Female"),
+    BMI=mean_sd(bmi,d=1),
+    Smoke_Current=n_pct(smoke_level.lab, level="Current"),
+    Smoke_Previous=n_pct(smoke_level.lab, level="Previous"),
+    Smoke_Never=n_pct(smoke_level.lab, level="Never"),
+    PA_Low=n_pct(pa_met_excess_lvl, level="Low"),
+    PA_Moderate=n_pct(pa_met_excess_lvl, level="Moderate"),
+    PA_High=n_pct(pa_met_excess_lvl, level="High"),
+    Alchohol_Daily=n_pct(alch_freq.lab, level="Daily or almost daily"),
+    Alcohol_3to4wk=n_pct(alch_freq.lab, level="3-4 per week"),
+    Alcohol_1to2wk=n_pct(alch_freq.lab, level="1-2 per week"), 
+    Alcohol_1to3mnth=n_pct(alch_freq.lab, level="1-3 per month"), 
+    Alcohol_occsions=n_pct(alch_freq.lab, level="Special occasions only"), 
+    Alcohol_never=n_pct(alch_freq.lab, level="Never"),
+    Alcohol_g=mean_sd(ALC, d=2),
+    Glucose=mean_sd(glu),
+    HbA1c=mean_sd(hba1c_max),
+    SBP=mean_sd(sbp),
+    DBP=mean_sd(dbp),
+    Triglyceride=mean_sd(tg),
+    LDL=mean_sd(ldl),
+    HDL=mean_sd(hdl)) %>% 
+  t()) %>% 
+    kable(caption = paste0(ANC, " genetic ancestry"))
+}
+
+lapply(ANCs[1], tabl_descr_basic.fun("EUR"))
+
+```
+
+```{r, p-diet} 
+
+# function to calculate p-values across taste diplotypes
+p_cont_bytaste_sexageadj.fun <- function(cont_var, data) {
+  
+  d <- data %>% mutate(taster_num = as.numeric(factor(taster_status, labels=c(0,1,2)))) %>%
+    select(age, sex, taster_status, taster_num, TCALS, y=all_of(cont_var))
+  
+  anv.P <- c((anova(lm(y~taster_status+age+sex+TCALS, d)))$`Pr(>F)`[1],NA,NA)
+  lm.P <- c(NA, summary(lm(y~taster_status+age+sex+TCALS, d))$coef[2:3,4])
+  lm.P.trend <- c(summary(lm(y~taster_num+age+sex+TCALS, d))$coef[2,4], NA, NA)
+  
+  d %>% group_by(taster_status) %>% 
+    reframe(msd=mean_sd(y)) %>%
+    mutate(lm.P=lm.P, lm.P.trend=lm.P.trend, Anova.P=anv.P) %>%
+    mutate(diet=rep(cont_var,3), .before=msd) %>%
+    return()
+}
+
+
+## calculate p-values for all diet traits & PCs
+p_dietBytaste.l <- lapply(ANCs, function(ANC) {
+  do.call(rbind.data.frame, lapply(names(diet_labels), function(i) {
+    p_cont_bytaste_sexageadj.fun(i, data = analysis.l[[ANC]]) } ))
+})
+
+```
+
+
+

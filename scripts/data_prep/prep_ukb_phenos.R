@@ -363,7 +363,7 @@ diet_id <- left_join(fread("/humgen/florezlab/UKBB_app27892/UKBB_app27892_downlo
   
   mutate_at(vars(CHO_pct, FAT_pct, PRO_pct, SFA_pct, MUFA_pct, PUFA_pct), ~ (. /TCALS) *100) %>%
   
-  mutate_at(vars(all_of(diet_vars)), remove_outliers.fun) %>%
+  #mutate_at(vars(all_of(diet_vars)), remove_outliers.fun) %>%
   select(id=f.eid, all_of(diet_vars))
 
 
@@ -551,8 +551,7 @@ phenos <- phenos_id %>%
 
 
 ## ALL participants
-phenos %>%
-  write_csv("../data/processed/ukb_phenos.csv")
+phenos %>% write_csv("../data/processed/ukb_phenos.csv")
 
 print(head(phenos))
 

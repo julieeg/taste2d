@@ -28,6 +28,11 @@ source /broad/software/scripts/useuse
 use R-4.1
 
 
+reuse -q Anaconda3
+source activate ../../opt/bgen
+
+
+
 
 
 ## Extract phased supertaster alleles from vcf.gz
@@ -54,12 +59,12 @@ EOF
 
 
 ## Extract dosage for supertaster alleles
-#bgenix -g $chr7_bgen -incl-rsids ./supertaster_snps > supertaster.bgen
-#../opt/plink2 \
-#--bgen ${scratch}/supertasters.bgen ref-first \
-#--sample /humgen/florezlab/UKBB_app27892/ukb27892_imp_chrAUT_v3_s487395.sample \
-#--export A \
-#--out ${geno_dir}/supertaster
+bgenix -g $chr7_bgen -incl-rsids ./supertaster_snps > ${geno_dir}/supertaster.bgen
+${plink2} \
+--bgen ${geno_dir}/supertaster.bgen ref-first \
+--sample /humgen/florezlab/UKBB_app27892/ukb27892_imp_chrAUT_v3_s487395.sample \
+--export A \
+--out ${geno_dir}/supertaster
 
 
 
