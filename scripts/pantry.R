@@ -49,9 +49,14 @@ dietVars <- c("raw_veg_QT", "cooked_veg_QT", "fresh_fruit_QT", "dried_fruit_QT",
               "addsalt_always_often_vs_nrs_BIN",  "hotdrink_temp_hot_or_vhot_vs_warm_BIN")
 
 
-#####################################################
-## ~~~~  Data display for descriptive tables  ~~~~ ##
-#####################################################
+################################################################################
+## ~~~~~~~~ Customized functions to clean, analyse & visualize data  ~~~~~~~~ ##
+################################################################################
+
+
+##########################################
+##  Data display for descriptive tables ##
+##########################################
 
 # ======================================
 ## Print continuous vars as mean +- SD 
@@ -116,11 +121,9 @@ zscore.fun <- function(x) {
 }
 
 
-
 # ========================
 ## Winsorize data by SD
 # ========================
-
 winsorize <- function(x, SDs=5) {
   bounds <- mean(x, na.rm=T) + SDs * c(-1, 1) * sd(x, na.rm=T)
   x <- ifelse(x<bounds[1], bounds[1], ifelse(x>bounds[2], bounds[2], x))
@@ -128,7 +131,9 @@ winsorize <- function(x, SDs=5) {
 }
 
 
+# =========================
 ## Add descriptive labels 
+# =========================
 descr_label.fun <- function(data, base_var, labs_vals) {
   
   base <- data %>% select(base_var) 
@@ -139,10 +144,33 @@ descr_label.fun <- function(data, base_var, labs_vals) {
   } ; return(temp)
 }
 
+
+# ===================================================
+## Function to convert genotypes to amino acids
+# ===================================================
+geno_to_aa.fun <- function(ANC.df) {
+  haplo_aa <- ANC.df %>% 
+    mutate(across(c("haplo_0", "haplo_1"), ~factor(
+      gsub("CAT", "AVI", gsub("CAC", "AVV", gsub("CGT", "AAI", gsub("CGC", "AAV", gsub("CAV", "AVI",gsub("GGC", "PAV", gsub("GGT", "PAI", gsub("GAT", "PVI", gsub("GAC", "PVV", haplo_0)))))))))))) %>% 
+    select(id, haplo_0, haplo_1)
+  names(haplo_aa) <- c("id", "haplo_0_aa", "haplo_1_aa")
+  return(haplo_aa)
+}
+
+
+
+##########################################################
+##  ~~~~~ Statistical analysis/summary functions ~~~~~  ##
+##########################################################
+
+# =======================================
+## Print descriptive table 1 by strata
+# =======================================
+source("../scripts/functions/print_summary_table_fun.R", echo=F)
+
 # ==============================================
 ## Function to get estimated marginal means
 # ==============================================
-
 get_emm.fun <- function(exposure, outcome, covars, reference, data=analysis) {
   exp.dat <- data %>% select(exp=exposure)
   dat <- data %>% mutate(exp=exp.dat$exp) ; dat$exp <- relevel(as.factor(dat$exp), ref=reference)
@@ -154,10 +182,75 @@ get_emm.fun <- function(exposure, outcome, covars, reference, data=analysis) {
 }
 
 
+# =================
+## summarize lm
+# =================
+print_lm <- function(exposure="taste_diplos", outcome="glu", covariates=m, label, data=analysis, interaction_term=F) {
+  
+  mod <- lm(formula(paste0(outcome, "~", exposure, "+", covariates)), data)
+  
+  # For categorical exposure variable 
+  if(is.numeric(data[, ..exposure][[1]]) == F) {
+    nX <- length(mod$xlevels[[exposure]])
+    out<-matrix(NA, nX, 6, dimnames = list(paste0(label, "_", mod$xlevels[[exposure]]), c("n", "beta", "se", "p", "f", "f_p")))
+    out[2:nrow(out),c(2:4)] <- summary(mod)$coef[2:nX, c(1:2,4)] ; out[1,5:6] <-c(anova(mod)[1,4], anova(mod)[1,5])
+    out[,1] <- as.vector(table(mod$model[[exposure]]))
+    
+   # # If interaction_term == T 
+  #  if(interaction_term != F) {
+  #    nInt <-  length(mod$xlevels[[interaction_term]])
+  ##    int <- summary(mod)$coef %>% as.data.frame() %>% filter(startsWith(rownames(.), exposure)==T)
+  #    out.int<-matrix(NA, nX, 6, dimnames = list(paste0(label, "_", mod$xlevels[[exposure]]), c("n", "beta", "se", "p", "f", "f_p")))
+  #    out[2:nrow(out),c(2:4)] <- [(nrow(mod.coefs)-nX):nrow(mod.coefs), c(1:2,4)] ; out[1,5:6] <-c(anova(mod)[1,4], anova(mod)[1,5])
+    
+  #}
+    
+  }
+  
+  # For continuous exposure variable
+  if(is.numeric(data[, ..exposure][[1]]) == T) {
+    out<-matrix(NA, 1, 4, dimnames = list(exposure, c("Model", "beta", "se", "p")))
+    out[2:4] <- summary(mod)$coef[2,c(1:2,4)]
+    out[,1] <- NA ; out[,1] <- label
+  }
+  
+  
+  # Return summary table
+  return(as.data.frame(out))
+}
 
-###########################
+
+print_glm <- function(exposure="taste_diplos", outcome, covariates=m, label, data=analysis) {
+  
+  mod <- glm(formula(paste0(outcome, "~", exposure, "+", covariates)), family=binomial("logit"), data) 
+  
+  # For categorical exposure variable 
+  if(is.numeric(data[, ..exposure][[1]]) == F) {
+    nX <- length(mod$xlevels[[exposure]])
+    out<-matrix(NA, nX, 6, dimnames = list(paste0(label, "_", mod$xlevels[[exposure]]), c("n", "beta", "se", "p", "f", "f_p")))
+    out[2:nrow(out),c(2:4)] <- summary(mod)$coef[2:nX, c(1:2,4)] ; out[1,5:6] <-c(anova(mod)[1,4], anova(mod)[1,5])
+    out[,1] <- as.vector(table(mod$model[[exposure]])) 
+  }
+  
+  # For continuous exposure variable
+  if(is.numeric(data[, ..exposure][[1]]) == T) {
+    out<-matrix(NA, 1, 4, dimnames = list(exposure, c("Model", "beta", "se", "p")))
+    out[2:4] <- summary(mod)$coef[2,c(1:2,4)]
+    out[,1] <- NA ; out[,1] <- label
+  }
+  
+  return(as.data.frame(out))
+  
+}
+
+
+######################################
+##  ~~~~~ Plotting functions ~~~~~  ##
+######################################
+
+## ===========================
 ## Plot diplotypes as barplot
-###########################
+## ===========================
 
 plot_Diplo.fun <- function(ANC) {
   
@@ -194,31 +287,29 @@ plot_Diplo.fun <- function(ANC) {
 }
 
 
-# =================
-## summarize lm
-# =================
 
-print_lm <- function(exposure="taster_status", outcome="glu", covariates=m, label=M, data=analysis) {
-  mod <- lm(formula(paste0(outcome, "~", exposure, "+", covariates)), data)
-  nX <- length(mod$xlevels[[exposure]])
-  out<-matrix(NA, nX, 6, dimnames = list(paste0(label, "_", mod$xlevels[[exposure]]), c("n", "beta", "se", "p", "f", "f_p")))
-  out[2:nrow(out),c(2:4)] <- summary(mod)$coef[2:nX, c(1:2,4)] ; out[1,5:6] <-c(anova(mod)[1,4], anova(mod)[1,5])
-  out[,1] <- as.vector(table(mod$model[[exposure]]))
-  return(out)
+# =========================
+## Plot dietPC waterfall
+# =========================
+plot_dietPC_waterfall.fun <- function(dPC.df, nPCs=10) {
+  dietPC.rot %>%
+    select(Diet, c(paste0("PC", 1:nPCs))) %>%
+    mutate(Diet=factor(Diet, levels=Diet[order(PC1, decreasing=T)])) %>%
+    pivot_longer(-Diet) %>% 
+    mutate(name=factor(name, levels=c(paste0("PC", 1:nPCs)), labels=c(paste0("Diet PC", 1:nPCs)) )) %>%
+    mutate(direction = factor(ifelse(value>0.2, "Positive/Major", ifelse(value<0.2 & value>0, "Positive/Minor", 
+                                                                         ifelse(value<0 & value>-0.2, "Negative/Minor", "Negative/Major"))),
+                              levels=c("Positive/Major", "Positive/Minor", "Negative/Minor", "Negative/Major"))) %>%
+    ggplot(aes(x=value, y=Diet, fill=direction)) + 
+    facet_wrap(~name, ncol=nPCs/2) + 
+    geom_col() + ylab("") + xlab("Rotated Factor Loadings") +
+    geom_vline(xintercept = c(-0.2, 0.2), color = "black", linetype = "dashed") +
+    geom_vline(xintercept = 0, color = "black") +
+    scale_fill_manual(values=palettes$nature_main4, name = "Factor Loadings") +
+    ggtheme_waterfall
 }
 
-# ===================================================
-## Function to convert genotypes to amino acids
-# ===================================================
 
-geno_to_aa.fun <- function(ANC.df) {
-  haplo_aa <- ANC.df %>% 
-    mutate(across(c("haplo_0", "haplo_1"), ~factor(
-      gsub("CAT", "AVI", gsub("CAC", "AVV", gsub("CGT", "AAI", gsub("CGC", "AAV", gsub("CAV", "AVI",gsub("GGC", "PAV", gsub("GGT", "PAI", gsub("GAT", "PVI", gsub("GAC", "PVV", haplo_0)))))))))))) %>% 
-    select(id, haplo_0, haplo_1)
-  names(haplo_aa) <- c("id", "haplo_0_aa", "haplo_1_aa")
-  return(haplo_aa)
-}
 
 
 ###############################################
@@ -240,8 +331,9 @@ ggtheme <- theme_bw() +
         axis.title = element_text(color="black", size=10),
         legend.position = "right", 
         legend.box.background = element_rect(color = "black"),
-        legend.key.size = unit(0.35, 'line'),
-        legend.margin = margin(0.2,0.2,0.2,0.2, unit="pt"),
+       # legend.key.size = unit(0.35, 'line'),
+        legend.key.size = unit(0.5, 'line'),
+        legend.margin = margin(0.5,0.5,0.5,0.5, unit="pt"),
         legend.text = element_text(size=8), 
         legend.title = element_text(face="bold", size=8),
         plot.title=element_text(size=8),
@@ -274,15 +366,15 @@ palettes <- list(NatComms= paletteer_d("ggsci::nrc_npg", n=10),
                  CovarGroups=c(brewer.pal(9,"Oranges")[4:6], brewer.pal(9, "Greens")[5:4], 
                                brewer.pal(9, "Blues")[5:6],  brewer.pal(9, "Purples")[c(8:4)], 
                                brewer.pal(9, "PiYG")[1:3], brewer.pal(9, "PuRd")[5:6]),
-                 taster_labs=c("Nontaster" = "#F98400", "Taster"= "#F4B02E", 
-                               "Supertaster"= "#00A08A",  "Other" = "grey50"),
-                 taster_cols=c("#F98400", "#F4B02E", "#00A08A", "grey50"),
-                 diplo_cols=c("CAT/CAT"="#F98400", "CAT/GGC"= "#F4B02E", "GGC/GGC"="#00A08A",
-                              c(rev(paletteer_dynamic("cartography::grey.pal", 20))[5:15])),
                  nature_main4=c("#888363","#C5C1A5", "#96A0B3", "#435269"),
-                 nature_diplosAA=c("AVI/AVI"="#CB9B23", "AVI/AAV"="#F7DC87", "AVI/PAV"="#E96900",
-                             "PAV/PAV"="#0096A0", "AAV/PAV"="#96CED4"),
-                 nature_haplos=c("AVI"="#CB9B23","PAV"="#0096A0", "AAV"="grey50","PVI"="grey50")
+                 nature_diplosAA_canonical=c("AVI/AVI"="#CB9B23", "AVI/AAV"="grey50", "AVI/PAV"="#E96900",
+                                   "PAV/PAV"="#0096A0", "AAV/PAV"="grey50"),
+                 nature_haplos=c("AVI"="#CB9B23","PAV"="#0096A0", "AAV"="grey50","PVI"="grey50"),
+                 
+                 nature_diplosAA_canonical_yrb=c("AVI/AVI"="#957628", "AVI/AAV"="grey50", "AVI/PAV"="#00488D",
+                                             "PAV/PAV"="#8F2F24", "AAV/PAV"="grey50"),
+                 nature_haplos_yrb=c("AVI"="#957628","PAV"="#8F2F24", "AAV"="grey50","PVI"="grey50"),
+                 hm_palette = colorRampPalette(c("#888363", "white", "#435269"))(n=100)
 )
 
 

@@ -9,11 +9,11 @@ florezlab_taste2d=/humgen/florezlab/users/jgervis/taste2d
 ## RECIPE
 
 # Make variable arrays
-declare -a anc_arr=("EUR" "AFR" "AMR" "CSA" "EAS" "MID")
+declare -a anc_arr=("EUR" "AFR" "AMR" "CSA" "EAS" "MID" "ALL")
 
 
 # Prepare ukb phenotypes & genotypes
-sub ../scripts/data_prep/prep_ukb_phenos.sh
+qsub ../scripts/data_prep/prep_ukb_phenos.sh
 qsub ../scripts/data_prep/phasing.sh
 
 
@@ -21,16 +21,22 @@ qsub ../scripts/data_prep/phasing.sh
 for ANC in "${anc_arr[@]}" ; do qsub ../scripts/data_prep/postprocess_ukb_data.sh $ANC; done 
 
 ## sync data to local R for analysis
-rsync -aP uger:$florezlab_taste2d/data/processed/"ukb_analysis_*.rda" ../data/processed/
-rsync -aP uger:$florezlab_taste2d/data/processed/diet/"*dietPCs.rda" ../data/processed/diet/
+rsync -aP uger:$florezlab_taste2d/data/processed/"ukb_analysis_EUR.rda" ../data/processed/
+rsync -aP uger:$florezlab_taste2d/data/processed/diet/"ukb_EUR_dietPCs.rda" ../data/processed/diet/
 
 
-# Primary lm analysis 
-for ANC in "${anc_arr[@]}" ; do Rscript ../scripts/analysis/run_lm_primary.R $ANC; done 
+# Primary association analyses 
+Rscript --vanilla ../scripts/analysis/run_lm.R EUR; done 
 
 
-## Main regression analysis
-for ANC in ALL EUR AFR AMR CSA EAS MID ; do Rscript --vanilla ../scripts/run_lm_primary.R ${ANC}; done
+
+## Summarize primary analysis
+
+
+## Secondary analysis with other bitter snps
+qsub ../scripts/get_bitter_snps.sh
+rsync uger:$florezlab_taste2d/data/processed/bitter_snps.raw ../data/procesed/bitter_snps.raw
+
 
 
 

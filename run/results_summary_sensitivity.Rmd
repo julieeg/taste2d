@@ -1,0 +1,141 @@
+---
+title: "results_summary_sensitivity"
+output: html_notebook
+---
+
+
+```{r setup, include=FALSE, echo=F}
+knitr::opts_chunk$set(echo = F, error = F, warning = F, out.width = "90%", out.height = "70%")
+
+lapply(c("tidyverse", "data.table", "paletteer", "ggpubr",
+         "R3port", "xtable", "knitr", "tinytex"),  library, character.only = TRUE)
+
+source("../scripts/pantry.R", echo=F)
+
+```
+
+
+##### Prepare analysis dataframe, mirroring results_summary.Rmd file
+```{r}
+###############################
+##   Load data by ancestry   ##
+###############################
+
+# system arguments
+EUR=c("European"="EUR")
+
+#load data for EUR ancestry
+EUR.df <- readRDS(paste0("../data/processed/ukb_analysis_", EUR, ".rda")) %>%
+  mutate(taster_status = factor(taster_status, levels=c("Nontaster", "Taster","Supertaster", "Other"))) 
+
+# load dietPCs
+dietPCs.dat <- readRDS(paste0("../data/processed/diet/ukb_EUR_dietPCs.rda"))
+dietPC_emm <- read.csv("../data/processed/analysis/EUR_emm_dietPC_diplos_sexage.csv")
+dietPC_pstat <- read.csv("../data/processed/analysis/EUR_pstat_dietPC_diplos_sexage.csv")
+
+
+# "Common" TAS2R38 hapotypes & diplotypes (>0.005)
+diplos_gt005_AA <- names(which(prop.table(table(analysis$diplos_common_AA))>0.005))
+AAs <- c(" AVI/AVI", "  AVI/PAV", "  PAV/PAV")
+
+analysis <- EUR.df %>% 
+  filter(N_contrl_compl == 1) %>%
+  filter(is.na(haplo_0) == F & is.na(haplo_1) == F) %>%
+  filter(fasting_hrs <= 24) %>%
+  # To compare only diplotypes with >0.005
+  mutate(diplos_AA = factor(ifelse(diplos_common_AA %in% diplos_gt005_AA, diplos_common_AA, NA),
+                            levels=c(diplos_gt005_AA))) %>%
+  # For linear trends
+  mutate(taste_diplos.num = case_when(
+    taste_diplos == "AVI/AVI" ~ 0,
+    taste_diplos == "AVI/PAV" ~ 1,
+    taste_diplos == "PAV/PAV" ~ 2,
+    TRUE ~ as.numeric(NA)),
+  taste_alleles = (rs713598_G+rs1726866_G+rs10246939_C),
+  # For descriptive purposes
+  alch_heavydrinker = as.factor(ifelse(alch_freq.lab == "Daily or almost daily" | alch_freq.lab == "3-4 per week", 1, 0)),
+  alch_lightdrinker = as.factor(ifelse(alch_freq.lab == "Special occasions only" | alch_freq.lab == "Never", 1, 0))
+    )
+
+dim(analysis)
+```
+
+## Sensitivity Analyses
+#### Run simple descriptives of participants with plausible energy intakes (N=98548)
+
+Plausible energy intake: >= 2509 kj (600 kcal) & 
+* for M: <20000 kJ (4780.2 kcal) 
+* for F: <18000 kj (4302.1 kcal)
+
+```{r}
+
+#Add variables for plausible/missing_implausible kcal 
+analysis <- analysis %>%
+  mutate(N_complete_kcal = ifelse(is.na(TCALS)==T, "Missing", "Complete"),
+         plausible_kcal.f = ifelse(is.na(kcal_plaus)==F, "Plausible", "Implausible_Missing")) 
+
+
+# Demographic, behavioral & risk factors
+vars_to_summarize_plauskcal <- c(
+  N_complete_kcal = "N, complete dietary data", 
+  diplos_AA = "TAS2R38 diplotype",
+  age="Age, years",
+  sex="Sex",
+  bmi="BMI, kg/m2",
+  smoke_level.lab="Smoking",
+  physact_level="Physical Activity, MET/wk",
+  alch_freq.lab="Alcohol Frequency",
+  educ_level.lab="Education Level",
+  income_level.lab = "Income Level",
+  glu="Glucose, mmol/L",
+  hba1c_max="HbA1C, %",
+  sbp="SBP, mmHg",
+  dbp="DBP, mmHg",
+  tg="Triglyceride, mmol/L",
+  ldl="LDL, mmol/L",
+  hdl="HDL, mmol/L"
+  )
+
+
+print_summary_table(data=analysis, vars_to_summarize = vars_to_summarize_plauskcal,
+                    var_strata = "plausible_kcal.f", var_strata_order = c("Plausible", "Implausible_Missing"))
+```
+
+
+#### Association of TAS2R38 with glucose, among plausible energy intake reporters
+
+
+```{r}
+# Glucose
+tab_lm_diplo_rg_plauskcal <- read.csv("../data/processed/analysis/EUR_lm_diplo_x_rg_plauskcal.csv") %>%
+  mutate(beta_se = sprintf("%s (%s, %s)", round(beta, 3), round(beta-1.96*se, 3), round(beta+1.96*se, 3))) %>%
+  mutate(Diplo = rep(AAs, 4), .before=beta) %>%
+  select(Model=model, Diplotype=Diplo, n, Beta_95CI=beta_se, P=p, Ftest_P=f_p, Ttest_P=t_p) 
+
+#HbA1C
+tab_lm_diplo_a1c_plauskcal <- read.csv("../data/processed/analysis/EUR_lm_diplo_x_a1c_plauskcal.csv") %>%
+  mutate(beta_se = sprintf("%s (%s, %s)", round(beta, 3), round(beta-1.96*se, 3), round(beta+1.96*se, 3))) %>%
+  mutate(Diplo = rep(AAs, 4), .before=beta) %>%
+  select(Model=model, Diplotype=Diplo, n, Beta_95CI=beta_se, P=p, Ftest_P=f_p, Ttest_P=t_p) 
+
+## Combine 
+tab_lm_diplo_gluA1c_plauskcal <- left_join(tab_lm_diplo_rg_plauskcal, tab_lm_diplo_a1c_plauskcal, by=c("Model", "n", "Diplotype"), suffix = c("_RG", "_HbA1c")) %>%
+  mutate(across(c("P_RG", "Ftest_P_RG", "Ttest_P_RG", "P_HbA1c", "Ftest_P_HbA1c", "Ttest_P_HbA1c"), ~round(., digits=3))) %>%
+  mutate(across(c("Beta_95CI_RG", "Beta_95CI_HbA1c"), ~gsub("NA ", "Reference", gsub("[(]NA.*", "", .)))) 
+
+#tab_lm_diplo_gluA1c_plauskcal %>% write.csv("../data/processed/analysis/EUR_tab_lm_diplo_x_glucA1c_plauskcal.csv")
+tab_lm_diplo_gluA1c_plauskcal %>% kable()
+
+
+## Stratified by fasting time --------------
+lm_diplo_x_gluXfast_plauskcal <- read.csv("../data/processed/analysis/EUR_lm_diplo_x_gluXfast_plauskcal.csv") %>%
+  mutate(beta_se = sprintf("%s (%s, %s)", round(beta, 3), round(beta-1.96*se, 3), round(beta+1.96*se, 3))) %>%
+  mutate(Diplo = rep(AAs, 20), .before=beta) %>%
+  select(model_fast, model, fast, Diplo, n, beta_se, p, f_p, t_p) 
+
+lm_diplo_x_gluXfast_plauskcal %>% select(-model_fast) %>% kable()
+
+```
+
+
+

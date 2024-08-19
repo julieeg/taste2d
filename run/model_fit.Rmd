@@ -1,0 +1,92 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r function}
+
+get_modelfit.fun <- function(model, data=analysis) {
+  mod <- model
+  rmse <- sqrt(mean(mod$residuals^2))
+  adj.R2 <- summary(mod)$adj.r.squared
+  df<-summary(mod)$df[2]
+  return(list(model_sum=summary(model), rmse=rmse, adj.R2=adj.R2, df=df))
+} 
+
+```
+
+
+# ====================================
+## Evaluate fasting time variable 
+# ====================================
+
+# Bar Plot 
+```{r}
+
+## Fasting variables
+bar_glu_x_fast <- analysis %>% 
+  filter(fasting_hrs <= 24) %>%
+  group_by(fasting_hrs) %>% 
+  filter(complete.cases(fasting_hrs)) %>% 
+  summarise(N=n(),
+          mean=mean(glu, na.rm=T),
+          sd=sd(glu, na.rm=T)) 
+
+bar_glu_x_fast %>%
+  ggplot(aes(x=fasting_hrs, y=mean-3.5, ymin=mean-3.5-sd, ymax=mean-3.5+sd)) +
+  geom_bar(stat="identity", position=position_dodge()) + 
+  scale_y_continuous(breaks=seq(0,3,0.5), limits = c(0,3), name="Blood glucose (mmol/L)", labels = seq(0,3,0.5)+3.5) +
+  scale_x_continuous(limits=c(0,25), expand=c(0,0), breaks=seq(1,24.5,1)) +
+  xlab("Time since last meal (hours)") +
+  geom_errorbar(width=0.2) + 
+  annotate("text", x=1:24, y=(bar_glu_x_fast$mean-3.5)+bar_glu_x_fast$sd+0.1, label=bar_glu_x_fast$N, size=2.5)
+
+```
+
+# Describe glucose by fasting time & TAS2R38 diplotype
+
+```{r}
+
+## Fasting variables
+bar_glu_x_fast_x_diplo <- analysis %>% 
+  group_by(fast_cat, taste_diplos) %>% 
+  filter(complete.cases(fasting_hrs, taste_diplos)) %>% 
+  summarise(N=n(),
+          mean=mean(glu, na.rm=T),
+          sd=sd(glu, na.rm=T)) 
+
+bar_glu_x_fast_x_diplo %>%
+  ggplot(aes(x=fast_cat, y=mean-4, ymin=mean-4-sd, ymax=mean-4+sd, fill=taste_diplos)) +
+  geom_bar(stat="identity", position=position_dodge(0.9)) + 
+  geom_errorbar(width=0.2, position=position_dodge(0.9)) + 
+  scale_y_continuous(breaks=seq(0,2,0.5), limits = c(0,2), name="Blood glucose (mmol/L)", labels = seq(0,2,0.5)+3.5) +
+  #scale_x_continuous(limits=c(0,25), expand=c(0,0), breaks=seq(1,24.5,1)) +
+  xlab("Time since last meal (hours)") 
+
+```
+
+
+
+## Model Fit
+# After reviewing the results with the larger dataset (not restricting to those with available 24HR data or plausible energy intakes),
+# I realized that (1) there was a relatively larger N with longer "fasting" windows; and (2) that glucose differed substantially
+# among later windows, potentially contributing to [what seems to be spurious] significant associations at 6+hrs
+
+# NOTE: Here is a reference for categorizing as 0-2, 3, 4, 5, 6-24: https://www.nature.com/articles/s41467-023-36013-1
+
+# Compare model fit statistics for models with different fasting categorical variables
+
+```{r}
+
+# AdjR2 for primary models
+do.call(rbind, lapply(models.l, function(m) {
+  mod <- lm(formula(paste0("glu~taste_diplos+", m)), data=analysis)
+  return(get_modelfit.fun(mod)$adj.R2)
+}))
+
+```
+
+
+
+
