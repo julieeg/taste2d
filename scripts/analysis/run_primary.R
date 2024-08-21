@@ -269,7 +269,7 @@ bind_rows(lapply(plausible_kcal.l, function(kcal) {
 ## - Diplotype * sex
 ## - Single & multiple interaction terms, in each model
 
-int.l <- c(Plausible_kcal="incl_kcal", Sex="sex", Income="income_level.lab", Educ= "educ_level.lab")
+int.l <- c(Plausible_kcal="as.factor(incl_kcal)", Sex="sex", Income="income_level.lab", Educ= "educ_level.lab")
 
 # Interactions with diplo*RG ------------------------
 do.call(rbind, lapply(1:length(int.l), function(i) {

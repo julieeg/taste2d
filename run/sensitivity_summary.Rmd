@@ -26,7 +26,7 @@ source("../scripts/pantry.R", echo=F)
 ```{r}
 
 ###############################
-##   Load data by ancestry   ##
+##   Load data for EUR only  ##
 ###############################
 
 # system arguments
@@ -238,10 +238,102 @@ lm_diplo_x_gluXfast_plauskcal %>% filter(Plausible_Kcal=="Implausible_Missing") 
 ```
 
 
-#### Dig into geno*plausible aparent interaction
+#### Dig into diploe x plausible intake interaction
+
+```{r, fig.width=12}
+
+analysis %>% 
+  group_by(plausible_kcal.f) %>%
+  reframe(Glucose=mean_sd(glu),
+          HbA1c=mean_sd(hba1c),
+          Fasting_hrs=mean_sd(fasting_hrs),
+          kcal_Mean_SD = mean_sd(TCALS),
+          Kcal_Minimum=min(TCALS, na.rm=T),
+          Kcal_Maximum=max(TCALS, na.rm=T),
+          Kcal_Include=n_pct(incl_kcal, level="1"),
+          Kcal_Exclude=n_pct(incl_kcal, level="0"),
+          Educ_College=n_pct(educ_level.lab, level="College or university degree"),
+          Educ_None=n_pct(educ_level.lab, level="None of the above"),
+          Inc_lt18k=n_pct(income_level.lab, level="lt_18000"),
+          Inc_gt100k=n_pct(income_level.lab, level="gt_100000")
+  ) %>% t() %>%
+  kable()
+
+
+## Correlation of fasting time with glucose in each group
+summary(lm(glu ~ fasting_hrs, data=analysis))$r.squared
+summary(lm(glu ~ fasting_hrs, data=analysis %>% filter(incl_kcal == 1)))$r.squared
+summary(lm(glu ~ fasting_hrs, data=analysis %>% filter(incl_kcal == 0)))$r.squared
+
+
+## Plots
+analysis %>%
+  group_by(plausible_kcal.f) %>%
+  reframe(mean=mean(glu, na.rm=T),
+          sd=sd(glu, na.rm=T)) %>%
+  ggplot(aes(x=plausible_kcal.f, y=mean-4, ymin=mean-4-sd, ymax=mean-4+sd, fill=as.factor(plausible_kcal.f))) +
+  geom_bar(stat = "identity", position=position_dodge(0.8)) +
+  geom_errorbar(position=position_dodge(0.8), width=0.5) +
+  scale_fill_manual(values=c("grey38", "forestgreen"), name="Plausible_Kcal") + 
+  scale_y_continuous(breaks=seq(0,2.5,0.5), labels=seq(0,2.5,0.5)+4) + 
+  ylab("Random Glucose, mmol/L") + xlab("Self-reported fasting time, hrs")
+
+
+## Bar plot of random glucose by fasting time, coded by plausibiity
+analysis %>%
+  select(glu, fasting_hrs, incl_kcal) %>%
+  group_by(fasting_hrs, incl_kcal) %>%
+  reframe(mean=mean(glu, na.rm=T),
+          sd=sd(glu, na.rm=T)) %>%
+  ggplot(aes(x=fasting_hrs, y=mean-4, ymin=mean-4-sd, ymax=mean-4+sd, fill=as.factor(incl_kcal))) +
+  geom_bar(stat = "identity", position=position_dodge(0.8)) +
+  geom_errorbar(position=position_dodge(0.8), width=0.5) +
+  scale_fill_manual(values=c("grey38", "forestgreen"), name="Plausible_Kcal") + 
+  scale_y_continuous(breaks=seq(0,2.5,0.5), labels=seq(0,2.5,0.5)+4) + 
+  ylab("Random Glucose, mmol/L") + xlab("Self-reported fasting time, hrs")
+
+analysis %>% group_by(fasting_hrs) %>%
+  reframe(N_Plausible = n_pct(plausible_kcal.f, level = "Plausible"),
+          N_Implaus_Miss = n_pct(plausible_kcal.f, level = "Implausible_Missing")
+          ) %>% t() %>%
+  kable()
+
+analysis %>%
+  select(glu, fast_cat, incl_kcal) %>%
+  group_by(fast_cat, incl_kcal) %>%
+  reframe(mean=mean(glu, na.rm=T),
+          sd=sd(glu, na.rm=T)) %>%
+  ggplot(aes(x=fast_cat, y=mean-4, ymin=mean-4-sd, ymax=mean-4+sd, fill=as.factor(incl_kcal))) +
+  geom_bar(stat = "identity", position=position_dodge(0.8)) +
+  geom_errorbar(position=position_dodge(0.8), width=0.5) +
+  scale_fill_manual(values=c("grey38", "forestgreen"), name="Plausible_Kcal") + 
+  scale_y_continuous(breaks=seq(0,2.5,0.5), labels=seq(0,2.5,0.5)+4) + 
+  ylab("Random Glucose, mmol/L") + xlab("Self-reported fasting time, hrs")  
+
+```
+
+```{r, fig.width=12}
+
+analysis %>%
+  select(glu, fast_cat, incl_kcal, taste_diplos) %>%
+  group_by(fast_cat, incl_kcal, taste_diplos) %>%
+  filter(complete.cases(taste_diplos)==T) %>%
+  reframe(mean=mean(glu, na.rm=T),
+          sd=sd(glu, na.rm=T)) %>%
+  ggplot(aes(x=taste_diplos, y=mean-4, ymin=mean-4-sd, ymax=mean-4+sd, fill=as.factor(incl_kcal))) +
+  facet_wrap(~fast_cat, nrow=1) +
+  geom_bar(stat = "identity", position=position_dodge(0.8)) +
+  geom_errorbar(position=position_dodge(0.8), width=0.5) +
+  scale_fill_manual(values=c("grey38", "forestgreen"), name="Plausible_Kcal") +
+  scale_y_continuous(breaks=seq(0,2.5,0.5), labels=seq(0,2.5,0.5)+4) +
+  ylab("Random Glucose, mmol/L") + xlab("Self-reported fasting time, hrs")
+  
+
+table(analysis$incl_kcal, is.na(analysis$TCALS)==T)
+
+```
 
 ```{r}
-
 int_diplo_glu <- read.csv("../data/processed/analysis/int_diplo_num_x_rg.csv")
 int_diplo_glu %>% filter(
   model == "Diet.Patterns") %>%
@@ -326,7 +418,7 @@ multiple_int %>%
   geom_bar(stat="identity") + 
   theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5, size=6)) + 
     facet_grid(~interaction, space="free", scales="free_x") + 
-  ggtitle("6+hr glucose") +
+  ggtitle("Random Glucose with Diplotye*Plauible interaction Plus ...") +
   scale_fill_manual(values=c("grey38", "blue", "lightblue"))
 
 
