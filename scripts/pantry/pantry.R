@@ -102,6 +102,33 @@ remove_outliers.fun <- function(x, SDs=5) {
   x
 }
 
+find_outliers.fun <- function(x, SDs=5, recode_outliers=1) {
+  bounds <- mean(x, na.rm=T) + SDs * c(-1, 1) * sd(x, na.rm=T)
+  x <- as.factor(ifelse(x>bounds[1] & x<bounds[2], 0, recode_outliers))
+  x
+}
+
+find_in_range.fun <- function(x, SDs=5) {
+  bounds <- mean(x, na.rm=T) + SDs * c(-1, 1) * sd(x, na.rm=T)
+  x <- as.factor(ifelse(x>bounds[1] & x<bounds[2],1,0))
+  x
+}
+
+
+
+# =============================
+## Flag missing values as 1/0
+# =============================
+
+recode_na_as.fun <- function(x, recode_na=0) {
+  x <- ifelse(is.na(x) == T, recode_na, 1)
+  x
+}
+
+recode_na_as_factor.fun <- function(x, recode_na=0) {
+  x <- as.factor(ifelse(is.na(x) == T, recode_na, 1))
+  x
+}
 
 # ================================================
 ## Median impute for negative or missing values
@@ -134,20 +161,36 @@ winsorize <- function(x, SDs=5) {
 # =========================
 ## Add descriptive labels 
 # =========================
+
+#e.g., labs_vals = female_labs <- list("Female" = 0, "Male" = 1)
 descr_label.fun <- function(data, base_var, labs_vals) {
-  
-  base <- data %>% select(base_var) 
+  base <- data %>% select(all_of(base_var)) 
   temp <- rep(NA, length(base))
-  
   for(i in 1:length(labs_vals)) {
     temp[base == labs_vals[[i]] ] <- names(labs_vals)[i]
   } ; return(temp)
 }
 
 
+descr_label_ordered.fun <- function(data, base_var, labs_vals) {
+  base <- data %>% select(all_of(base_var)) 
+  temp <- rep(NA, length(base))
+  for(i in 1:length(labs_vals)) {
+    temp[base == labs_vals[[i]] ] <- names(labs_vals)[i]
+  } ; temp <- factor(temp, levels=names(labs_vals)) 
+  return(temp)
+}
+
+
+
 # ===================================================
 ## Function to convert genotypes to amino acids
 # ===================================================
+geno_to_aa <- c("CAT"="AVI", "CAC"="AVV", "CGT"="AAI", 
+                "CGC"="AAV", "CAV"="AVI", "GGC"="PAV", 
+                "GGT"="PAI", "GAT"="PVI", "GAC"="PVV"
+)
+
 geno_to_aa.fun <- function(ANC.df) {
   haplo_aa <- ANC.df %>% 
     mutate(across(c("haplo_0", "haplo_1"), ~factor(
@@ -166,7 +209,8 @@ geno_to_aa.fun <- function(ANC.df) {
 # =======================================
 ## Print descriptive table 1 by strata
 # =======================================
-source("../scripts/functions/print_summary_table_fun.R", echo=F)
+source("../scripts/pantry/print_summary_table_fun.R", echo=F)
+
 
 # ==============================================
 ## Function to get estimated marginal means
@@ -185,9 +229,11 @@ get_emm.fun <- function(exposure, outcome, covars, reference, data=analysis) {
 # =================
 ## summarize lm
 # =================
-print_lm <- function(exposure="taste_diplos", outcome="glu", covariates=m, label, data=analysis, interaction_term=F) {
+print_lm <- function(exposure="taste_diplos", outcome="glu", covariates=m, label, data=analysis, 
+                     round=F, digits=c(3,6), lm_trend=F) {
   
   mod <- lm(formula(paste0(outcome, "~", exposure, "+", covariates)), data)
+  if(label==F) {label <- outcome}
   
   # For categorical exposure variable 
   if(is.numeric(data[, ..exposure][[1]]) == F) {
@@ -195,27 +241,28 @@ print_lm <- function(exposure="taste_diplos", outcome="glu", covariates=m, label
     out<-matrix(NA, nX, 6, dimnames = list(paste0(label, "_", mod$xlevels[[exposure]]), c("n", "beta", "se", "p", "f", "f_p")))
     out[2:nrow(out),c(2:4)] <- summary(mod)$coef[2:nX, c(1:2,4)] ; out[1,5:6] <-c(anova(mod)[1,4], anova(mod)[1,5])
     out[,1] <- as.vector(table(mod$model[[exposure]]))
-    
-   # # If interaction_term == T 
-  #  if(interaction_term != F) {
-  #    nInt <-  length(mod$xlevels[[interaction_term]])
-  ##    int <- summary(mod)$coef %>% as.data.frame() %>% filter(startsWith(rownames(.), exposure)==T)
-  #    out.int<-matrix(NA, nX, 6, dimnames = list(paste0(label, "_", mod$xlevels[[exposure]]), c("n", "beta", "se", "p", "f", "f_p")))
-  #    out[2:nrow(out),c(2:4)] <- [(nrow(mod.coefs)-nX):nrow(mod.coefs), c(1:2,4)] ; out[1,5:6] <-c(anova(mod)[1,4], anova(mod)[1,5])
-    
-  #}
-    
-  }
+    # If lm_trend should be printed
+    if(lm_trend == T) {
+      exposure_num <- as.numeric(data[, ..exposure][[1]])
+      data <- data %>% mutate(exposure.num=exposure_num)
+      lm.trend <- as.vector(summary(lm(formula(paste0(outcome, "~exposure.num+", covariates)), data))$coef[2,])
+      out <- as.data.frame(out) %>% mutate(t_p=c(lm.trend[4], rep(" ", nX-1) )) } 
+  } ; 
   
   # For continuous exposure variable
   if(is.numeric(data[, ..exposure][[1]]) == T) {
     out<-matrix(NA, 1, 4, dimnames = list(exposure, c("Model", "beta", "se", "p")))
     out[2:4] <- summary(mod)$coef[2,c(1:2,4)]
     out[,1] <- NA ; out[,1] <- label
+    } 
+  
+  # If values should be rouded
+  if(round == T) {
+    out <- data.frame(out) %>%
+      mutate(across(c("beta", "se"), ~round(as.numeric(.), digits[1]))) %>%
+      mutate_at("p", ~round(as.numeric(.), digits[2]) ) 
   }
   
-  
-  # Return summary table
   return(as.data.frame(out))
 }
 
@@ -244,13 +291,80 @@ print_glm <- function(exposure="taste_diplos", outcome, covariates=m, label, dat
 }
 
 
+# ==================================
+## summarize lm with interaction
+# ==================================
+print_lm_interaction <- function(exposure="taste_diplos", interaction, outcome="glu", 
+                                 model=m, label_model, label_interaction, print_interaction_term, 
+                                 lm_trend=T, round=T, digits=c(3,6), data) {
+  
+  mod <- lm(formula(paste0(outcome, "~", exposure, "*", interaction, "+", model)), data)
+  mod.anova <- anova(mod)
+  if(label_model==F) {model_label <- outcome} ; if(label_interaction==F) {
+    label_interaction <- paste0(exposure, "x", outcome) }
+  
+  # For categorical exposure variable 
+  if(is.numeric(data[, ..exposure][[1]]) == F) {
+    nExp <- length(mod$xlevels[[exposure]]) ; nInt <- length(mod$xlevels[[interaction]])
+    out<-matrix(NA, nExp+nInt, 6, dimnames = list(c(mod$xlevels[[exposure]], mod$xlevels[[interaction]]), c("n", "beta", "se", "p", "f", "f_p")))
+    out[2:nExp,c(2:4)] <- summary(mod)$coef[2:nExp, c(1:2,4)] ; out[1,5:6] <- c(anova(mod)[1,4], anova(mod)[1,5])
+    out[(nExp+2):(nExp+nInt),c(2:4)] <- summary(mod)$coef[3:(3+nInt-2), c(1:2,4)] ; out[(nExp+1),5:6] <- c(mod.anova[2,4], mod.anova[2,5])
+    out[,1] <- c(as.vector(table(mod$model[[exposure]])), as.vector(table(mod$model[[interaction]])))
+    
+    out <- rbind(c(rep(NA, 4), mod.anova[(nrow(mod.anova)-1),4], mod.anova[(nrow(mod.anova)-1),5]), out)
+    rownames(out)[1] <- label_interaction
+   
+     # If lm_trend should be printed
+    #if(lm_trend == T) {
+     # exposure_num <- as.numeric(data[, ..exposure][[1]])
+     # data <- data %>% mutate(exposure.num=exposure_num)
+     # lm.trend <- as.vector(summary(lm(formula(paste0(outcome, "~exposure.num+", covariates)), data))$coef[2,])
+    # out <- as.data.frame(out) %>% mutate(t_p=c(lm.trend[4], rep(" ", nX-1) )) } 
+  } ; 
+
+  # If values should be rouded
+  if(round == T) {
+    out <- data.frame(out) %>%
+      mutate(across(c("beta", "se"), ~round(as.numeric(.), digits[1]))) %>%
+      mutate_at("p", ~round(as.numeric(.), digits[2]) ) 
+  }
+  
+  return(as.data.frame(out))
+}
+
+
+# ===================================
+## Make print_lm tables "pretty"
+# ===================================
+
+make_pretty_lm <- function(lm_table, digits=c(3,6)) {
+  d_est<-digits[1];d_pval<-digits[2]
+  pretty_table <- lm_table %>%
+    mutate(across(ends_with("_p"), ~as.numeric(., d_pval))) %>%
+    mutate(across(ends_with("_p"), ~round(., d_pval))) %>%
+    mutate(beta_se = sprintf("%s (%s, %s)", round(beta, d_est), round(beta-1.96*se, d_est), round(beta+1.96*se, d_est))) %>%
+    mutate(exp = gsub(".*[_]", "", rownames(.)), .before=n) %>%
+    mutate(Model=rownames(.)) %>%
+    rename_with(~paste0(toupper(gsub("[_].*", "", .)), ".test_P"), ends_with("_p")) %>%
+    select(Model, Exposure=exp, N=n, Beta_95CI=beta_se, P=p, ends_with("_P")) %>%
+    mutate_all(~ifelse(is.na(.), "-", .)) %>%
+    mutate_at("Beta_95CI", ~ifelse(. == "NA (NA, NA)", "-", .)) %>%
+    mutate(Model = gsub("[_].*", "", Model)) #%>%
+  #  tibble()
+  rownames(pretty_table) <- NULL
+  
+  return(pretty_table)
+}
+  
+
+
 ######################################
 ##  ~~~~~ Plotting functions ~~~~~  ##
 ######################################
 
-## ===========================
+## ==============================
 ## Plot diplotypes as barplot
-## ===========================
+## ==============================
 
 plot_Diplo.fun <- function(ANC) {
   
@@ -311,7 +425,6 @@ plot_dietPC_waterfall.fun <- function(dPC.df, nPCs=10) {
 
 
 
-
 ###############################################
 ##  ~~~~  Color palettes & plot themes  ~~~~ ##
 ###############################################
@@ -320,8 +433,21 @@ plot_dietPC_waterfall.fun <- function(dPC.df, nPCs=10) {
 ## pre-built color palettes & ggplot themes
 # ============================================
 
+ggtheme_basic <- theme(
+  axis.text = element_text(color="black", size=10), 
+  axis.title.y = element_text(color="black", size=12, vjust=-0.5),
+  axis.title.x = element_text(color="black", size=12, vjust=-0.5),
+        legend.position = "bottom", 
+        legend.box.background = element_rect(color = "black"),
+        legend.key.size = unit(0.5, 'line'),
+        legend.margin = margin(0.5,0.5,0.5,0.5, unit="pt"),
+        legend.text = element_text(size=8), 
+        legend.title = element_text(face="bold", size=8),
+        plot.title=element_text(size=10),
+        strip.text = element_text(face="bold", size=10))
+
 # set ggplot theme
-ggtheme <- theme_bw() + 
+ggtheme_fancy <- theme_bw() + 
   theme(panel.grid.minor.y = element_blank(), 
         panel.grid.major.y = element_blank(), 
         panel.grid.minor.x = element_blank(), 
@@ -353,6 +479,10 @@ ggtheme_waterfall <-
         legend.key.size = unit(0.25,"cm"))
 
 
+
+# =================================
+## Build pre-set color palettes 
+# =================================
 library("paletteer") ; library("RColorBrewer")
 palettes <- list(NatComms= paletteer_d("ggsci::nrc_npg", n=10),
                  greens5 = paletteer_dynamic("cartography::green.pal", 5),
@@ -374,7 +504,10 @@ palettes <- list(NatComms= paletteer_d("ggsci::nrc_npg", n=10),
                  nature_diplosAA_canonical_yrb=c("AVI/AVI"="#957628", "AVI/AAV"="grey50", "AVI/PAV"="#00488D",
                                              "PAV/PAV"="#8F2F24", "AAV/PAV"="grey50"),
                  nature_haplos_yrb=c("AVI"="#957628","PAV"="#8F2F24", "AAV"="grey50","PVI"="grey50"),
-                 hm_palette = colorRampPalette(c("#888363", "white", "#435269"))(n=100)
+                 hm_palette = colorRampPalette(c("#888363", "white", "#435269"))(n=100),
+                 hm_corr_blue = colorRampPalette(c("white", "#CAE5EF", "#96CED4", "#48BDBC", "#0096A0"))(n=100),
+                 plaus_24hr=c("grey38", "forestgreen"),
+                 has_24hr=c("forestgreen", "grey38")
 )
 
 
@@ -421,54 +554,4 @@ plot_categorical <- function(cat_var, data=analysis) {
 }
 
 ## EOF
-
-
-
-
-
-
-
-# ================================= HOLD =============================== ##
-
-########################################
-##  Save tables/figures as csvs/pdfs  ##
-########################################
-
-#write wrapper function to generate latex summary output
-#save_latex <- function(output, type, title, order, plwidth=0.9, show=F, ...) {
-#  
-#  if(type == "plot") {
-#    ltx_plot(output, title=title, lwidth=paste0(plwidth,"\\linewidth"),
-#             fontsize = 1, show=show, orientation = "portrait",
-#             out = tempfile(paste0(ANC, "_", order), fileext = ".tex"), ...)
-#  } ; if (type == "table") {
-#    ltx_list(output, group=0, title=title, show=show,
-#             footnote = "none", size=8, orientation = "portrait",
-#             out=tempfile(paste0(ANC, "_", order), fileext = ".tex"))
-#  }
-#}
-
-#outputs.l <- list(
-#  out1 = list(output=tabl_sample, type="table", title=paste0("Sample Inclusions: ",ANC), order=1),
-#  out2 = list(output=plot_descr_diplo, type="plot", title="Common TAS2R38 diplotypes", order=2, pheight=4, pwidth=8),
-#  out3 = list(output=plots_descr_base_bm, type="plot", title="Demographic lifestyle and health characteristics by taster status", order=3, pheight=8, pwidth=6),
-#  out4 = list(output=tabl_descr_gluA1c_fast, type="table", title="Descriptive statistics: Glucose and hbA1c by taster stauts", order=4),
-#  out5 = list(output=plot_dietPC_waterfall, type="plot", title="Waterfall plot of food group factor loadings for diet PCs", pheight=7, pwidth=10, order=5),
-#  out6 = list(output=tabl_descr_diet, type="table", title="Diet traits by taster status", order=6)
-#)
-
-#lapply(outputs.l, function(out) do.call(save_latex, out))
-#ltx_combine(combine = tempdir(),  out=paste0("../output/", ANC, "_phenos_summary.tex"),
-#            template=paste0(system.file(package="R3port"), "/default.tex"), orientation="portrait") 
-
-# unlink tempdir to delete temporary files
-#unlink(tempdir(), recursive = T)
-
-
-
-
-
-
-
-
 

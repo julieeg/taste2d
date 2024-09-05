@@ -1,3 +1,10 @@
+
+# load functions & pantry file
+library(tidyverse) ; library(data.table)
+source("../scripts/pantry.R")
+
+
+
 #############################################################
 ##  Assoc of Quinine/Caffeine Bitter SNPs with RG & HbA1c  ## 
 #############################################################
@@ -6,11 +13,6 @@
 ## Set up & load data
 # ======================
 
-# load functions & pantry file
-library(tidyverse) ; library(data.table)
-source("../scripts/pantry.R")
-
-
 # load dosage data for bitter snps
 bitter_snps <- read.table("../data/processed/bitter_snps.raw", header = T) %>%
   mutate(rs2597979_G = ifelse(rs2597979_G >= 0 & rs2597979_G <0.5, 0, ifelse(rs2597979_G >=0.5 & rs2597979_G < 1.5, 1, 2))) %>%
@@ -18,7 +20,7 @@ bitter_snps <- read.table("../data/processed/bitter_snps.raw", header = T) %>%
 
 
 ## load analysis dataframe
-analysis <- readRDS(paste0("../data/processed/ukb_analysis_", ANC, ".rda")) %>%
+analysis <- readRDS(paste0("../data/processed/ukb_analysis_EUR.rda")) %>%
   filter(N_contrl_compl==1) %>%
   filter(is.na(haplo_0) == F & is.na(haplo_1) == F) %>%
   filter(fasting_hrs <= 24) 

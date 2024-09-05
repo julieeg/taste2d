@@ -5,13 +5,13 @@ date: "2024-06-13"
 ---
 
 ```{r setup, include=FALSE, echo=F, error=F, warning=F, message=F}
-knitr::opts_chunk$set(echo = F, error = F, warning = F, out.width = "90%", out.height = "50%")
+knitr::opts_chunk$set(echo = F, error = F, warning = F, fig.align="center", 
+                      out.width = "90%", out.height = "50%")
 
 lapply(c("tidyverse", "data.table", "paletteer", "ggpubr", "gplots",
          "R3port", "xtable", "knitr", "tinytex", "emmeans"),  library, character.only = TRUE)
 
-source("../scripts/pantry.R", echo=F)
-
+source("../scripts/pantry/pantry.R", echo=F)
 ```
 
 
@@ -23,52 +23,48 @@ source("../scripts/pantry.R", echo=F)
 # system arguments
 EUR=c("European"="EUR")
 
-#load data for EUR ancestry
-EUR.df <- readRDS(paste0("../data/processed/ukb_analysis_", EUR, ".rda")) %>%
-  mutate(taster_status = factor(taster_status, levels=c("Nontaster", "Taster","Supertaster", "Other"))) 
+# load analysis dataframe
+EUR.df <- readRDS(paste0("../data/processed/ukb_analysis_", EUR, ".rda")) 
 
+analysis <- EUR.df %>%
+  filter(ancestry=="EUR" & n_geno==1 & n_t2d_contrl == 1 &
+           n_glu == 1 & n_complete == 1 & n_fast_24hr == 1) %>%
+  filter(find_outliers.fun(glu) == 0)
+# range(analysis$glu): 2.116 - 8.002
+  
 #load dietPCs
 dietPCs.dat <- readRDS(paste0("../data/processed/diet/ukb_EUR_dietPCs.rda"))
-dietPC_emm <- read.csv("../data/processed/analysis/EUR_emm_dietPC_diplos_sexage.csv")
-dietPC_pstat <- read.csv("../data/processed/analysis/EUR_pstat_dietPC_diplos_sexage.csv")
+dietPC_emm <- read.csv("../data/processed/analysis/EUR_emm_dietPC_diplos_sexage_v3.csv")
+dietPC_pstat <- read.csv("../data/processed/analysis/EUR_pstat_dietPC_diplos_sexage_v3.csv")
 ```
 
-\n
+""
 
 ## *Inclusion/Exclusion criteria*
 * No diabetes data (Eastwood algorithm + HbA1c <5.7%)
 * Complete data for glucose, genetic ancestry, and behavioral/SES covariates
- 
+
+"" 
 
 Planned sensitivity analyses
 * Restrict to individuals with plausible total energy intakes : <20MJ for men; <18 MJ for women (range based on values considered plausible by UKB in DataShowcase with additional exclusions to those with >600 kcal, as a lower limit)
 
 ```{r incl-anc}
 
-# Sample inclusions
 EUR.df %>% 
-  mutate(N_geno = ifelse(is.na(haplo_0) == F & is.na(haplo_1) == F, "1", "0")) %>%
-  mutate(N_fasting = ifelse(fasting_hrs<=24, "1", "0")) %>%
-  mutate(N_contrl_compl_fast=ifelse(N_contrl_compl==1 & N_fasting == 1,"1","0")) %>%
-  #filter(N_geno == 1) %>%
-  select(starts_with("N_")) %>% 
-  reframe(N_European=n_pct(N_Ancestry, level="1"),
-          N_geno=n_pct(N_geno, level="1"),
-          N_contrl=n_pct(N_contrl, level="1"),
-          N_fasting_lt24hr=n_pct(N_fasting, level="1"),
-          N_contrl_compl=n_pct(N_contrl_compl, level="1"),
-          N_contrl_compl_fast=n_pct(N_contrl_compl_fast, level="1"),
-          N_contrl_compl_kcal=n_pct(N_contrl_compl_kcal, level="1"),
-          N_contrl_compl_kcal_taste=n_pct(N_contrl_compl_kcal_taste, level="1")) %>% 
+  mutate(n_glu_range=ifelse(glu>=2.116 & glu <=8.002,1,0)) %>%
+  mutate(n_include=ifelse(n_geno==1 & n_t2d_contrl==1 & n_complete==1 & 
+                            n_fast_24hr==1 & n_glu_range==1,1,0)) %>%
+  reframe("European, *n* (%)"=n_pct(N_ancestry, level="1"),
+          "Genotyping, *n* (%)"=n_pct(n_geno, level="1"),
+          "T2D Controls, *n* (%)"=n_pct(n_t2d_contrl, level="1"),
+          "Complete covariate data, *n* (%)"=n_pct(n_complete, level="1"),
+          "Fasting ≤24 hr, *n* (%)"=n_pct(n_fast_24hr, level="1"),
+          "Analytial sample, *N* (%)"=n_pct(n_include, level="1")
+          ) %>%
   t() %>%
   kable()
 
-analysis <- EUR.df %>% 
-  filter(N_contrl_compl == 1) %>%
-  filter(is.na(haplo_0) == F & is.na(haplo_1) == F) %>%
-  filter(fasting_hrs <= 24) 
-
-dim(analysis) #N=241,955
 ```
  
   
@@ -80,9 +76,6 @@ We examined the distributions of common (frequency >0.0005) TAS2R38 genotypess
 # ================================
 ## Summary of haplotypes
 # ================================
-
-## Add haplo_0_aa and haplo_1_aa to analysis.l dataframe list
-analysis <- analysis %>% left_join(geno_to_aa.fun(analysis), by = "id")
 
 ## Table
 tab_haplos_AA <- analysis %>%
@@ -103,21 +96,19 @@ plot_haplos_AA <- tab_haplos_AA %>%
   scale_y_continuous(limits=c(0,62), breaks=seq(0,60,10)) +
   ylab("Frequency (%)") + 
   scale_fill_manual(values = palettes$nature_haplos_yrb, name="TAS2R38 Haplotypes (n)") + 
-  ggtheme +
-    theme(axis.text.x = element_text(size=8, angle=25, hjust=1, color = "black"), 
+  ggtheme_basic + 
+  theme(axis.text.x = element_text(size=8, angle=25, hjust=1, color = "black"), 
           axis.text.y = element_text(size=8, color = "black"),
           axis.title = element_text(color = "black", face = "bold", size=10),
           legend.position = "bottom") +
     geom_text(aes(label=n), vjust=-0.35, size=3.0)
 
-#plot_haplos_AA %>% ggsave(filename="../output/EUR_plot_haplo_005_AA.pdf", height = 4, width=4.5)
-
+#plot_haplos_AA %>% ggsave(filename="../output/EUR_plot_haplo_005_AA_v3.pdf", height = 4, width=4.5)
 
 
 # ================================
 ## Summary of Diplotypes
 # ================================
-
 ## Create variable in analysis for **common diplotypes**
 diplos_gt005_AA <- names(which(prop.table(table(analysis$diplos_common_AA))>0.005))
 
@@ -147,14 +138,14 @@ plot_diplo_AA <- tab_diplos_AA %>%
   scale_y_continuous(limits=c(0,52), breaks=seq(0,50,10)) +
   ylab("Frequency (%)") + 
   scale_fill_manual(values = palettes$nature_diplosAA_canonical_yrb, name="TAS2R38 Diplotypes") + 
-  ggtheme +
+  ggtheme_basic +
     theme(axis.text.x = element_text(size=8, angle=25, hjust=1, color = "black"), 
           axis.text.y = element_text(size=8, color = "black"),
           axis.title = element_text(color = "black", face = "bold", size=10),
           legend.position = "bottom") +
   geom_text(aes(label=n), vjust=-0.35, size=3.0)
 
-#plot_diplo_AA %>% ggsave(filename="../output/EUR_plot_diplo_005_AA.pdf", height = 4, width=6)
+#plot_diplo_AA %>% ggsave(filename="../output/EUR_plot_diplo_005_AA_v3.pdf", height = 4, width=6)
 
 
 # =================================================
@@ -177,14 +168,11 @@ We summarized demographic, behavioral and health characteristics among all ident
 ```{r}
 
 ## Additional coding of decriptive variables 
-analysis <- analysis %>% mutate(
-  alch_1to4d.lab = ifelse(alch_freq.lab == "3-4 per week" | alch_freq.lab == "1-2 per week", "1-4 per week", "other"),
-  addsalt_3lvl.lab = factor(ifelse(addsalt.lab == "Always" | addsalt.lab == "Often", "Always/Often", addsalt.lab),
-                            levels=c("Always/Often", "Sometimes", "Never/Rarely")))
-
+taste_diplos <- c("AVI/AVI", "AVI/PAV", "PAV/PAV")
 
 ## Re-order diplotype variable for tables & P-value determinations (ref = AVI/AVI)
-#analysis <- analysis %>% mutate(diplos_AA = factor(diplos_AA, levels=c("AVI/AVI", "AVI/PAV", "PAV/PAV", "AVI/AAV", "AAV/PAV")))
+analysis <- analysis %>% mutate(
+  ALC_drinkers = ifelse(ALC == 0 | is.na(ALC)==T | alch_freq.lab == "Never", NA, ALC))
 
 ## Demographic, behavioral & risk factors
 vars_to_summarize <- c(
@@ -194,7 +182,7 @@ vars_to_summarize <- c(
   smoke_level.lab="Smoking",
   physact_level="Physical Activity, MET/wk",
   alch_freq.lab="Alcohol Frequency",
-  ALC="Alcohol intake",
+  ALC_drinkers="Alcohol intake (among drinkers)",
   educ_level.lab="Education Level",
   income_level.lab = "Income Level",
   glu="Glucose, mmol/L",
@@ -214,53 +202,53 @@ t1_summary <- print_summary_table(
   vars_to_summarize = vars_to_summarize, 
   var_strata = "diplos_AA", #var_strata = "diplos_AA", 
   var_strata_order = c("AVI/AVI", "AVI/PAV", "PAV/PAV", "AVI/AAV", "AAV/PAV"),
+  p_types = "descriptive",
   p_print = T, p_adjust = "agesex", digits = c(1,0,4), data=analysis) 
+  #tapply(analysis$sbp, analysis$diplos_AA, mean_sd, d=0)
+  #tapply(analysis$dbp, analysis$diplos_AA, mean_sd, d=0)
 
-#t1_summary %>% write.csv("../data/processed/analysis/EUR_descr_diploAA_taste_v2.csv")
-t1_summary %>% kable()
+#t1_summary %>% write.csv("../data/processed/analysis/EUR_descr_diploAA_taste_v3.csv")
 
+## save summary table for taste_diplos, only for p-values
+t1_summary_suppl <- print_summary_table(
+  vars_to_summarize = vars_to_summarize, 
+  var_strata = "taste_diplos", #var_strata = "diplos_AA", 
+  var_strata_order = c("AVI/AVI", "AVI/PAV", "PAV/PAV"),
+  p_types = c("descriptive", "trend"),
+  p_print = T, p_adjust = "agesex", digits = c(3,1,6), data=analysis) 
 
-## NOTE: 0 digits for BP vars
-#tapply(analysis$sbp, analysis$diplos_AA, mean_sd, d=0)
-#tapply(analysis$dbp, analysis$diplos_AA, mean_sd, d=0)
-
+t1_summary_suppl %>% kable(caption = "Table 1 across TAS2R38 diplotypes (canonical)")
 ```
 
 
-## Check whether diplotypes captured expected phenotypic differences in bitter-related diet trait
+## TAS2R38 and food choices 
+##### Check whether diplotypes captured expected phenotypic differences in bitter-related diet trait
 
 ```{r}
-analysis <- analysis %>% mutate(
-  taste_diplos.num = case_when(
-    taste_diplos == "AVI/AVI" ~ 0,
-    taste_diplos == "AVI/PAV" ~ 1,
-    taste_diplos == "PAV/PAV" ~ 2,
-    TRUE ~ as.numeric(NA)),
-  taste_alleles = (rs713598_G+rs1726866_G+rs10246939_C),
-  alch_heavydrinker = as.factor(ifelse(alch_freq.lab == "Daily or almost daily" | alch_freq.lab == "3-4 per week", 1, 0)),
-  alch_lightdrinker = as.factor(ifelse(alch_freq.lab == "Special occasions only" | alch_freq.lab == "Never", 1, 0))
-    )
 
 ## Compare continuous diet traits by diplotypes - P-values
-rbind.data.frame(
-  print_lm(exposure = "taste_diplos.num", outcome="coffee_QT", covariates = "age+sex", label="Coffee"),
-  print_lm(exposure = "taste_diplos.num", outcome="tea_QT", covariates = "age+sex", label="Tea"),
-  print_lm(exposure = "taste_diplos.num", outcome="raw_veg", covariates = "age+sex", label="Raw vegetables"),
-  print_glm(exposure = "taste_diplos.num", outcome="alch_heavydrinker", covariates = "age+sex", label="Heavy drinker"),
-  print_glm(exposure = "taste_diplos.num", outcome="alch_lightdrinker", covariates = "age+sex", label="Heavy drinker")
-  ) %>%
-  mutate(across(c(beta, se, p), ~as.numeric(.))) %>% mutate(across(where(is.numeric), ~round(., 3))) %>%
-  kable()
+bitter_foods <- c(
+  coffee_QT="Coffee, cups/day",
+  tea_QT="Tea, cups/day",
+  raw_veg="Raw vegetables, tbsp/day",
+  ALC="Alcohol, g/day",
+  alch_heavydrinker="Heavy drinker"
+)
+  
+## save summary table for taste_diplos, only for p-values
+t1_bitterfood <- print_summary_table(
+  vars_to_summarize = bitter_foods, 
+  var_strata = "taste_diplos", #var_strata = "diplos_AA", 
+  var_strata_order = c("AVI/AVI", "AVI/PAV", "PAV/PAV"),
+  p_types = c("descriptive", "trend"),
+  p_print = T, p_adjust = "agesex", digits = c(2,1,6), data=analysis) 
 
+t1_bitterfood %>% kable()
 ```
 
+##### Compare food choice patterns across TAS2R38 diplotypes
 
-
-#### Compare food choice patterns across TAS2R38 diplotypes
-
-
-```{r}
-
+```{r, fig.width=8, fig.height=6}
 dietPC.rot <- dietPCs.dat$rotation %>% 
   as.data.frame() %>%
   mutate(Diet=diet_labels[rownames(.)], .before=PC1) %>%
@@ -275,7 +263,7 @@ dietPC_summary <- as.data.frame(summary(dietPCs.dat)$importance %>% t()) %>%
 
 p_dietPC_summary <- dietPC_summary %>% 
   ggplot(aes(x=dietPC, y=`Eigenvalues`)) +
-  ggtheme +
+  ggtheme_basic +
   scale_x_continuous(breaks=seq(1,24,1), expand=c(0.01,0.5)) +
   scale_y_continuous(limits=c(0, 2.65), breaks=seq(0,2.5,0.5),
                      sec.axis = sec_axis(~.*4, name = "Percent Variance Explained (%)", breaks = seq(0,10,2))) +
@@ -288,18 +276,21 @@ p_dietPC_summary <- dietPC_summary %>%
 
 #p_dietPC_summary %>% ggsave(filename = "../output/plot_dietPC_summary.pdf", height=4, width=6)
 p_dietPC_summary
+```
 
 
+#### Examine adherence to the food choice patterns by canonical TAS2R38 diplotypes
+```{r, fig.width=12, fig.height=10}
 # =====================================
 ## Summary plots of factor loadings
 # =====================================
 # Waterfall plot 
-plot_dietPC_waterfall.fun(dietPC.rot)
+#plot_dietPC_waterfall.fun(dietPC.rot)
 
 # Heat Map 
 dietPC.mat <- as.matrix(dietPC.rot[,-1])
 rownames(dietPC.mat) <- dietPC.rot$Diet
-#pdf("../output/plot_hm_dietPC_v2.pdf", height=4, width=12)
+#pdf("../output/plot_hm_dietPC_v3.pdf", height=4, width=12)
 heatmap.2(dietPC.mat,
           col=palettes$hm_palette,
           scale = "none", 
@@ -312,12 +303,6 @@ heatmap.2(dietPC.mat,
           offsetRow=0, offsetCol = 0) 
 #dev.off()
 
-```
-
-
-#### Examine adherence to the food choice patterns by canonical TAS2R38 diplotypes
-
-```{r}
 # =======================================
 # Summarize EMMs for dPCs by diplotype
 # =======================================
@@ -326,7 +311,7 @@ dietPCs <- c(paste0("dietPC", 1:24))
 ## Filter by significance & after MC adjustment
 #dietPC_pstat %>% filter(P_val_f <0.05) ; dietPC_pstat %>% filter(P_val_f <0.05/24)
 #dietPC_pstat %>% filter(P_val_t <0.05) ; dietPC_pstat %>% filter(P_val_t <0.05/24)
-pcs_to_plot <- c(3,4,6,11,12,13,15,16,17) # 3,6,11,12 remain after MC based on F-test
+pcs_to_plot <- c(3,4,5,6,11,12,13,15,17) # 3,6,11,12 remain after MC based on F-test
 
 
 # ==========================================
@@ -335,7 +320,7 @@ pcs_to_plot <- c(3,4,6,11,12,13,15,16,17) # 3,6,11,12 remain after MC based on F
 plot_bar_dPCftest <- dietPC_pstat %>%
   ggplot(aes(x=DietPC, y=F_stat)) + 
   geom_bar(stat="identity", fill="darkgrey") + 
-  ggtheme + 
+  ggtheme_basic + 
   theme(#axis.text.x = element_blank(),
         axis.text.y=element_text(size=6), axis.title.y = element_text(size=7, face="bold"),
         axis.ticks.x = element_blank(),
@@ -346,8 +331,7 @@ plot_bar_dPCftest <- dietPC_pstat %>%
   ylab("F statistic") + xlab("") +
   scale_x_continuous(limits=c(0,25), breaks=seq(1,24,1), expand = c(-0.01,0)) +
   geom_vline(xintercept = 0.3, linewidth=0.25, color="black")
-
-#plot_bar_dPCftest %>% ggsave(filename="../output/plot_dPC_Ftest_v2.pdf", height=1.5, width=8)
+#plot_bar_dPCftest %>% ggsave(filename="../output/plot_dPC_Ftest_v3.pdf", height=1.5, width=8)
 
 
 # ==========================================
@@ -356,7 +340,7 @@ plot_bar_dPCftest <- dietPC_pstat %>%
 plot_bar_dPCttest <- dietPC_pstat %>%
   ggplot(aes(x=DietPC, y=T_stat)) + 
   geom_bar(stat="identity", fill="darkgrey", width=0.8) + 
-  ggtheme + 
+  ggtheme_basic + 
   theme(#axis.text.x = element_blank(),
         axis.text.x = element_text(size=7), axis.text.y = element_text(size=6), 
         axis.title.x = element_text(size=7, face="bold"), axis.title.y = element_text(size=7, face="bold"),
@@ -367,14 +351,32 @@ plot_bar_dPCttest <- dietPC_pstat %>%
   scale_x_continuous(limits=c(0,25), breaks=seq(1,24,1), expand = c(-0.01,0)) +
   scale_y_continuous(limits=c(-5.25,3.5)) #+
  # geom_vline(xintercept = 0.3, linewidth=0.25, color="black")
-
-#plot_bar_dPCttest %>% ggsave(filename="../output/plot_dPC_Ttest_v2_labels.pdf", height=1.75, width=8)
-
+#plot_bar_dPCttest %>% ggsave(filename="../output/plot_dPC_Ttest_v3_labels.pdf", height=1.75, width=8)
 
 # =====================
 ## Plot side-by-side
 # =====================
 ggarrange(plot_bar_dPCftest, plot_bar_dPCttest, nrow=2, align="hv")
+
+```
+
+
+```{r, include=F}
+## Look further into sex-stratified comparison for dietPC11 & dietPC12, which seem to be sex-specific
+summary(lm(dietPC11 ~ taste_diplos*sex+age, data=analysis))$coef
+summary(lm(dietPC11 ~ taste_diplos.num*sex+age, data=analysis))$coef
+summary(lm(dietPC11 ~ taste_diplos+age, data=analysis %>% filter(sex == "Female")))$coef
+summary(lm(dietPC11 ~ taste_diplos+age, data=analysis %>% filter(sex == "Male")))$coef
+
+summary(lm(dietPC12 ~ taste_diplos*sex+age, data=analysis))$coef
+summary(lm(dietPC11 ~ taste_diplos.num*sex+age, data=analysis))$coef
+summary(lm(dietPC12 ~ taste_diplos+age, data=analysis %>% filter(sex == "Female")))$coef
+summary(lm(dietPC12 ~ taste_diplos+age, data=analysis %>% filter(sex == "Male")))$coef
+
+#*Note: I looked at interactions of taste_diplo*sex on dietPC11 and dietPC12 which seem to be sex specific
+#*While there were no sigificant interactions its interesting that the inheritance sems to differ for males vs. females:
+#-For males, AVI/AVI ~ AVI/PAV ≠ PAV/PAV (recessive coding, where both PAV haplotypes are needed to show an effect)
+#-For females, AVI/AVI ≠ AVI/PAV ~ PAV/PAV (dominant coding, where one PAV haplotype is needed to show an effect)
 
 ```
 
@@ -393,7 +395,7 @@ plot_emm_dPC_signif <- dietPC_emm %>%
   geom_point(size=2.25) + geom_errorbar(width=0.55) + 
   scale_color_manual(values=palettes$nature_diplosAA_canonical_yrb, name="TAS2R38 Diplotype") + 
   ylab("Marginal Mean (95% CI) PC score") + xlab("TAS2R38 Diplotype") +
-  ggtheme+theme(axis.text.x = element_text(angle=35, hjust=1), legend.position = "bottom") +
+  ggtheme_basic+theme(axis.text.x = element_text(angle=35, hjust=1), legend.position = "bottom") +
     theme(axis.title = element_text(face="bold", color="black", size=8)) +
   theme(panel.grid.major.y = element_line())
 
@@ -401,14 +403,73 @@ plot_emm_dPC_signif <- dietPC_emm %>%
 plot_emm_dPC_signif
 ```
 
+" "
+" "
 
-## Primary Regression Analysis
+## Primary Analysis
 #### Asssociations of canonical TAS2R38 diplotype with markers of glucose homeostasis random glucose & a1c
+Descriptive comparisons: Mean (SD) with sex- and age-adjusted P-values
 
-For the primary analysis of TAS2R38 diplotype with random glucose, we used generalized linear models with 4 sets of covariates.
+```{r}
+fast_cat <- c("0to2hr", "3hr", "4hr", "5hr", "6+hr")
+fast_cat.l <- as.list(fast_cat)
 
+# Random glucose & HbA1c by taste diplotypes
+glycemic_vars <- c(glu="Glucose", hba1c="HbA1c") 
+
+# Describe glucose by diplotype & continuous fasting time: categorical
+rbind.data.frame(
+  print_summary_table(data=analysis, vars_to_summarize = glycemic_vars, var_strata = "taste_diplos", 
+                      var_strata_order = c("AVI/AVI", "AVI/PAV", "PAV/PAV"), digits = c(3,0,6)) %>%
+    mutate(Fasting = "Random", .before="Total"),
+  do.call(rbind.data.frame, lapply(fast_cat.l, function(f) {
+    print_summary_table(vars_to_summarize = glycemic_vars, var_strata = "taste_diplos",
+                        var_strata_order = c("AVI/AVI", "AVI/PAV", "PAV/PAV"), p_adjust=c("agesex"),
+                        digits=c(3,0,6), data=analysis %>% filter(fast_cat == f)) %>% 
+      mutate(Fasting = f, .before="Total") })) ) %>% 
+  kable(caption = "Mean (SD) glycemic measures by Diplotype - continuous fasting hours")
+```
+
+Summarize descriptive comparisons (for glucose)
+```{r}
+# RG -----------
+rbind.data.frame(
+  print_lm(exposure="taste_diplos", outcome="glu", covariates = "age+sex", label = "Sex/age-adj RG", data=analysis),
+  print_lm(exposure="taste_diplos", outcome="glu", covariates = paste0(c("age", "sex", paste0("gPC", 1:10)), collapse="+"), label = "Sex/age/gPC-adj RG", data=analysis)) %>% 
+  kable(caption="Descriptive comparisons of random glucose by TAS2R38 diplotyoe (categorical) ")
+
+rbind.data.frame(
+  print_lm(exposure="taste_diplos.num", outcome="glu", covariates = "age+sex", label = "Sex/age-adj RG", data=analysis),
+  print_lm(exposure="taste_diplos.num", outcome="glu", covariates = paste0(c("age", "sex", paste0("gPC", 1:10)), collapse="+"), label = "Sex/age/gPC-adj RG", data=analysis)) %>% 
+  kable(caption ="Descriptive comparisons of random glucose by TAS2R38 diplotyoe (continuous per PAV haplotype)")
+
+
+# RG x fasting time -----------
+rbind.data.frame(
+  print_lm(exposure="taste_diplos", outcome="glu", covariates = "age+sex", label = "Sex/age-adj RG", data=analysis %>% filter(fast_cat == "0to2hr")),
+  print_lm(exposure="taste_diplos", outcome="glu", covariates = paste0(c("age", "sex", paste0("gPC", 1:10)), collapse="+"), label = "Sex/age/gPC-adj RG", data=analysis %>% filter(fast_cat == "0to2hr"))) %>% 
+  kable(caption = "Descriptive comparisons of 0-2hr glucose by TAS2R38 diplotyoe (categorical)")
+
+rbind.data.frame(
+  print_lm(exposure="taste_diplos.num", outcome="glu", covariates = "age+sex", label = "Sex/age-adj RG", data=analysis %>% filter(fast_cat == "0to2hr")),
+  print_lm(exposure="taste_diplos.num", outcome="glu", covariates = paste0(c("age", "sex", paste0("gPC", 1:10)), collapse="+"), label = "Sex/age/gPC-adj RG", data=analysis %>% filter(fast_cat == "0to2hr"))) %>% 
+  kable(caption = "Descriptive comparisons of 0-2hr glucose by TAS2R38 diplotyoe (continuous per PAV haplotype)")
+
+## Additional plot of glucose by fasting time -------
+analysis %>% ggplot(aes(x=as.factor(fasting_hrs), y=glu)) +
+  geom_boxplot(position=position_dodge(0.9)) + scale_fill_manual(values=palettes$has_24hr)
+
+
+```
+
+" " 
+" "
+
+### Associations of TAS2R38 diplotype with glycemic measures
+
+We used generalized linear models with 4 models.
 * Exposure: categorical diplotype (reference = AVI/AVI)
-* Outcomes: continunous glucose traits
+* Outcomes: continunous glycemic measures
 * Covariates: 4 models; base, bmi, lifestyle, food choices
 
 
@@ -416,14 +477,13 @@ For the primary analysis of TAS2R38 diplotype with random glucose, we used gener
 AAs <- c(" AVI/AVI", "  AVI/PAV", "  PAV/PAV")
 
 ## Print table of associations of Diplos with RG ---------------------------
-tab_lm_diplo_rg <- read.csv("../data/processed/analysis/EUR_lm_diplo_x_rg_v2.csv") %>% 
+tab_lm_diplo_rg <- read.csv("../data/processed/analysis/EUR_lm_diplo_x_rg_v3.csv") %>% 
   mutate(beta_se = sprintf("%s (%s, %s)", round(beta, 3), round(beta-1.96*se, 3), round(beta+1.96*se, 3))) %>%
   mutate(Diplo = rep(AAs, 4), .before=beta) %>%
   select(Model=model, Diplotype=Diplo, n, Beta_95CI=beta_se, P=p, Ftest_P=f_p, Ttest_P=t_p) 
 
-
 ## Print table of associations of Diplos with A1c ---------------------------
-tab_lm_diplo_a1c <- read.csv("../data/processed/analysis/EUR_lm_diplo_x_a1c_v2.csv") %>% 
+tab_lm_diplo_a1c <- read.csv("../data/processed/analysis/EUR_lm_diplo_x_a1c_v3.csv") %>% 
   mutate(beta_se = sprintf("%s (%s, %s)", round(beta, 3), round(beta-1.96*se, 3), round(beta+1.96*se, 3))) %>%
   mutate(Diplo = rep(AAs, 4), .before=beta) %>%
   select(Model=model, Diplotype=Diplo, n, Beta_95CI=beta_se, P=p, Ftest_P=f_p, Ttest_P=t_p)
@@ -433,8 +493,8 @@ tab_lm_diplo_a1c <- read.csv("../data/processed/analysis/EUR_lm_diplo_x_a1c_v2.c
 tab_lm_diplo_gluA1c <- left_join(tab_lm_diplo_rg, tab_lm_diplo_a1c, by=c("Model", "n", "Diplotype"), suffix = c("_RG", "_HbA1c")) %>%
   mutate(across(c("P_RG", "Ftest_P_RG", "Ttest_P_RG", "P_HbA1c", "Ftest_P_HbA1c", "Ttest_P_HbA1c"), ~round(., digits=3))) %>%
   mutate(across(c("Beta_95CI_RG", "Beta_95CI_HbA1c"), ~gsub("NA ", "Reference", gsub("[(]NA.*", "", .)))) 
+  #tab_lm_diplo_gluA1c %>% write.csv("../data/processed/analysis/EUR_tab_lm_diplo_x_glucA1c_v3.csv")
 
-#tab_lm_diplo_gluA1c %>% write.csv("../data/processed/analysis/EUR_tab_lm_diplo_x_glucA1c_v2.csv")
 tab_lm_diplo_gluA1c %>%
   mutate_all(~ifelse(is.na(.), "-", .)) %>%
   kable(caption = "Association of TAS2R38 diplotype with markers of glucose homeostasis")
@@ -442,21 +502,62 @@ tab_lm_diplo_gluA1c %>%
 ```
 
 
-#### Asssociations of canonical TAS2R38 diplotype with markers of glucose homeostasis by fasting time 
+#### Association of TAS2R38 with gluose by fasting time
+
 
 ```{r}
 
+plot_glyc_by_diploxFast <- function(taste_var="taste_diplos", glycemic_var, fasting_var, data=analysis) {
+  data %>%
+    select(taste=taste_var, glycemic=glycemic_var) %>%
+    filter(complete.cases(taste)==T) %>%
+    group_by(taste) %>%
+    reframe(n=n(),
+            mean=mean(glycemic, na.rm=T),
+            sd=sd(glycemic, na.rm=T)) %>%
+    mutate(fast = NA, .before=n) %>%
+    bind_rows(
+      analysis %>% 
+        select(taste=taste_var, glycemic=glycemic_var, fast=fasting_var) %>%
+        filter(complete.cases(taste)==T) %>%
+        group_by(taste, fast) %>%
+        reframe(n=n(),
+                mean=mean(glycemic, na.rm=T),
+                sd=sd(glycemic, na.rm=T)) ) %>%
+    mutate(fast_facet = factor(ifelse(is.na(fast), "Random", "Fasting"))) %>%
+    
+    ggplot(aes(x=fast, y=mean-4, fill=taste, ymin=mean-4-sd, ymax=mean-4+sd)) + 
+    ggtheme_basic + #facet_grid(~fast_facet, space="free_x") +
+    geom_bar(stat="identity", position=position_dodge(0.9)) + 
+    geom_errorbar(linewidth=0.35, position=position_dodge(0.9)) +
+    scale_fill_manual(values=palettes$nature_diplosAA_canonical_yrb, name="TAS2R38 Diplotypes") + 
+    theme(legend.position = "bottom")
+}
+  
+#plot_glyc_by_diploxFast(glycemic_var = "glu", fasting_var = "fasting_hrs")
+plot_glyc_by_diploxFast(glycemic_var = "glu", fasting_var = "fast_cat")
+
+analysis %>%
+  group_by(fast_cat) %>%
+  reframe(Taste_AVI.AVI=n_pct(taste_diplos, level="AVI/AVI"),
+          Taste_AVI.PAV=n_pct(taste_diplos, level="AVI/PAV"),
+          Taste_PAV.PAV=n_pct(taste_diplos, level="PAV/PAV"),
+          Sex_Female=n_pct(sex, level="Female"),
+          Sex_Male=n_pct(sex, level="Male")) %>%
+  kable()
+
+
+```
+
+##### Primary regression analysis
+```{r}
 ## Glucose stratified by fasting time in all models ---------------------------
-tab_lm_diplo_gluXfast <- read.csv("../data/processed/analysis/EUR_lm_diplo_x_gluXfast_v2.csv") %>%
+tab_lm_diplo_gluXfast <- read.csv("../data/processed/analysis/EUR_lm_diplo_x_gluXfast_v3.csv") %>%
   mutate(beta_se = sprintf("%s (%s, %s)", round(beta, 3), round(beta-1.96*se, 3), round(beta+1.96*se, 3))) %>%
   mutate(Diplo = rep(AAs, 20), .before=beta) %>%
   select(model_fast, model, fast, Diplo, n, beta_se, p, f_p, t_p) 
-#tab_lm_diplo_gluXfast %>% write.csv("../data/processed/analysis/EUR_tab_lm_rg_fastcat_allModels_v2.csv")
+#tab_lm_diplo_gluXfast %>% write.csv("../data/processed/analysis/EUR_tab_lm_rg_fastcat_allModels_v3.csv")
 
-
-#tab_lm_diplo_dluXfast %>% select(-model_fast) %>%
-#  pivot_wider(values_from=c(beta_se, p, f_p, t_p), names_from = model, names_glue = "{model}_{.value}", names_sort = F) %>%
-#  write.csv("../data/processed/analysis/EUR_tab_lm_rg_fastcat_allModels_v2.csv")
 tab_lm_diplo_gluXfast %>% select(-model_fast) %>%
   select(Model=model, Fasting=fast, Diplo, n, Beta_95CI=beta_se, P=p, Ftest_P=f_p, Ttest_P=t_p) %>%
   mutate(across(c("P", "Ftest_P", "Ttest_P"), ~round(., digits=4))) %>%
@@ -466,7 +567,7 @@ tab_lm_diplo_gluXfast %>% select(-model_fast) %>%
 
 
 # plot of EMM glucose by fasting time in diet patterns model
-emm_gluXfast_diet <- read.csv("../data/processed/analysis/EUR_emm_diplo_x_gluXfast_diet_v2.csv")
+emm_gluXfast_diet <- read.csv("../data/processed/analysis/EUR_emm_diplo_x_gluXfast_diet_v3.csv")
 
 p_emm_gluXfast_diet <- emm_gluXfast_diet %>%
   mutate(fast = factor(fast, levels=c("6+hr", "5hr", "4hr", "3hr", "0to2hr"),
@@ -474,17 +575,17 @@ p_emm_gluXfast_diet <- emm_gluXfast_diet %>%
          Diplotypes = factor(exp, levels=c("AAV/PAV","PAV/PAV", "AVI/PAV", "AVI/AVI","AVI/AAV"))) %>%
   ggplot(aes(y=emmean, x=fast, ymin=lower.CL, ymax=upper.CL, color=Diplotypes)) + 
   coord_flip() +
-  geom_hline(yintercept = seq(4.8,5,0.025), breaks=seq(4.825, 4.975, 0.025), linewidth=0.15, color="grey") +
+  ylim(4.84,5)+
+  geom_hline(yintercept = seq(4.85,5,0.025), linewidth=0.15, color="grey") +
   geom_point(size=1.715, position=position_dodge(0.5)) + 
   geom_errorbar(width=0.35, position=position_dodge(0.5), linewidth=0.65) + 
   scale_color_manual(values=palettes$nature_diplosAA_canonical_yrb, name="TAS2R38 Diplotype") +
-  ggtheme + 
-  ylab("Marginal mean (95% CI) blood glucose, mmol/L") + 
+  ggtheme_basic + ylab("Marginal mean (95% CI) blood glucose, mmol/L") + 
   xlab("Time since last meal, hours") + 
   theme(axis.title = element_text(face="bold", size=10),
         axis.text = element_text(size=12))
 
-#p_emm_gluXfast_diet %>% ggsave(filename="../output/plot_emm_gluXfast_v2.pdf", height=4.5, width=5)
+#p_emm_gluXfast_diet %>% ggsave(filename="../output/plot_emm_gluXfast_v3.pdf", height=4.5, width=5)
 p_emm_gluXfast_diet
 
 ```

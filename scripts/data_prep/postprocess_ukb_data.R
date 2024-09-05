@@ -6,7 +6,7 @@ library(data.table)
 library(vcfR)
 
 # load basic functions
-source("../scripts/pantry.R", echo=F)
+source("../scripts/pantry/pantry.R", echo=F)
 
 
 
@@ -109,11 +109,9 @@ genos_id <-  genos_id %>%
 
 
 ## Make variable for common diplotypes -------------
-
 diplos_common <- which(prop.table(table(genos_id$diplos_pal))>0.001)
 genos_id <- genos_id %>% mutate(
-  diplos_common = ifelse(diplos_pal %in% names(diplos_common), diplos_pal, NA)
-)
+  diplos_common = ifelse(diplos_pal %in% names(diplos_common), diplos_pal, NA))
 
 
 ## Recode alleles as amino acids -----------------------
@@ -129,7 +127,20 @@ genos_id <- genos_id %>%
 ## Create variable for canonical diplotypes (AVI/AVI, AVI/PAV, PAV/PAV)
 taste_diplos <- c("AVI/AVI", "AVI/PAV", "PAV/PAV")
 genos_id <- genos_id %>%
-  mutate(taste_diplos = ifelse(diplos_common_AA %in% taste_diplos, diplos_common_AA, NA)) 
+  mutate(taste_diplos = factor(ifelse(diplos_common_AA %in% taste_diplos, diplos_common_AA, NA),
+                               levels=taste_diplos)) %>%
+  mutate(
+    taste_diplos.num = case_when(
+      taste_diplos == "AVI/AVI" ~ 0,
+      taste_diplos == "AVI/PAV" ~ 1,
+      taste_diplos == "PAV/PAV" ~ 2,
+      TRUE ~ as.numeric(NA)),
+    taste_alleles = (rs713598_G+rs1726866_G+rs10246939_C)
+  )
+  
+
+## Add haplo_0_aa and haplo_1_aa to analysis.l dataframe list
+genos_id <- genos_id %>% left_join(geno_to_aa.fun(genos_id), by = "id")
 
 
 paste("Done compiling genotype data! ")
@@ -167,8 +178,8 @@ select("id", all_of(pheno_vars), all_of(gPC_vars), all_of(nutrient_vars), all_of
     alch_heavydrinker = as.factor(ifelse(alch_freq.lab == "Daily or almost daily" | alch_freq.lab == "3-4 per week", 1, 0)),
     alch_lightdrinker = as.factor(ifelse(alch_freq.lab == "Special occasions only" | alch_freq.lab == "Never", 1, 0)),
     #Ref: https://biobank.ndph.ox.ac.uk/showcase/field.cgi?id=100026
-    kcal_plaus = ifelse(sex == "Male" & TCALS >= 600 & TCALS < 4780.1 | 
-                          sex == "Female" & TCALS >= 600 & TCALS < 4302.2, TCALS, NA),
+    kcal_plaus = ifelse(sex == "Male" & TCALS >= 600 & TCALS <= 4800 | 
+                          sex == "Female" & TCALS >= 600 & TCALS <= 4300, TCALS, NA),
     fasting_hrs_lt24 = ifelse(fasting_hrs <= 24, fasting_hrs, NA)) %>%
   mutate(
     income_level.lab = factor(income_level.lab, 
@@ -201,23 +212,20 @@ select("id", all_of(pheno_vars), all_of(gPC_vars), all_of(nutrient_vars), all_of
                          fasting_hrs_lt24 == 4 ~ "4hr",
                          fasting_hrs_lt24 == 5 ~ "5hr",
                          fasting_hrs_lt24 >= 6 ~ "6+hr",
-                         TRUE ~ as.character(NA)),
-    fasting_gt6hr = case_when(fasting_hrs_lt24 >= 6 ~ 1, fasting_hrs_lt24 < 6 ~ 0, TRUE ~ as.numeric(NA)),
-    fasting_gt2hr = case_when(fasting_hrs_lt24 >=2 ~ 1, fasting_hrs_lt24 < 2 ~ 0, TRUE ~ as.numeric(NA)),
-    fasting_gt3hr = case_when(fasting_hrs_lt24 >=3 ~ 1, fasting_hrs_lt24 < 3 ~ 0, TRUE ~ as.numeric(NA)),
-    fasting_gt1hr = case_when(fasting_hrs_lt24 >= 1 ~ 1, fasting_hrs_lt24 < 1 ~ 0, TRUE ~ as.numeric(NA)),
-    fasting_gt4hr = case_when(fasting_hrs_lt24 >= 4 ~ 1, fasting_hrs_lt24 < 4 ~ 0, TRUE ~ as.numeric(NA)),
-    fasting_gt5hr = case_when(fasting_hrs_lt24 >= 5 ~ 1, fasting_hrs_lt24 < 5 ~ 0, TRUE ~ as.numeric(NA))
+                         TRUE ~ as.character(NA))
   ) %>%
+  ## Added descriptive variables for Table 1
   mutate(
-    taste_diplos.num = case_when(
-      taste_diplos == "AVI/AVI" ~ 0,
-      taste_diplos == "AVI/PAV" ~ 1,
-      taste_diplos == "PAV/PAV" ~ 2,
-      TRUE ~ as.numeric(NA)),
-    taste_alleles = (rs713598_G+rs1726866_G+rs10246939_C)
-    )
-
+    alch_1to4d.lab = ifelse(alch_freq.lab == "3-4 per week" | alch_freq.lab == "1-2 per week", "1-4 per week", "other"),
+    addsalt_3lvl.lab = factor(ifelse(addsalt.lab == "Always" | addsalt.lab == "Often", "Always/Often", addsalt.lab),
+                          levels=c("Always/Often", "Sometimes", "Never/Rarely")),
+    alch_heavydrinker = as.factor(ifelse(alch_freq.lab == "Daily or almost daily" | alch_freq.lab == "3-4 per week", 1, 0)),
+    alch_lightdrinker = as.factor(ifelse(alch_freq.lab == "Special occasions only" | alch_freq.lab == "Never", 1, 0))
+    ) %>%
+  mutate(
+    N_complete_kcal = ifelse(is.na(TCALS)==T, "Missing", "Complete"),
+    plausible_kcal.f = ifelse(is.na(kcal_plaus)==F, "Plausible", "Implausible_Missing")
+  )
 
 
 # Build diet PCs for diet patterns -------------
@@ -288,28 +296,35 @@ phenos_processed_id <- phenos_id %>%
 #   - sensitivity: Canonical TAS2R38 diplotypes
 
 # function to identify missingness
-summarise_noNA <- function(x, varname, data=phenos_processed_id) {
-  return((data %>% select(c("id", x)) %>% mutate(noNA = ifelse(complete.cases(.), 1, 0)))$noNA) }
+find_complete_group.fun <- function(x, varname, data=phenos_processed_id) {
+  return((data %>% select(c("id", all_of(x))) %>% mutate(complete = ifelse(complete.cases(.), 1, 0)))$complete) }
 
 # add indicator variables for exclusion criteria
 phenos_processed_id <- phenos_processed_id %>% 
   mutate(
-    incl_geno = ifelse(is.na(haplo_0) == F & is.na(haplo_1) == F, 1, 0),
-    incl_t2d = ifelse(!is.na(t2d_case.f) & t2d_case.f == "Control", 1, 0),
-    incl_compl_glu = ifelse(is.na(glu)==T, 0, 1),
-    incl_taste = ifelse(is.na(taster_status) == T | taster_status == "Other", 0, 1),
-    incl_kcal = ifelse(is.na(kcal_plaus)==T, 0, 1)) %>%
-  mutate(
-    incl_compl_fast = ifelse(is.na(fast_cat)==T, 0, 1),
-    incl_compl_covars = summarise_noNA(c("age", "sex", paste0("gPC", 1:10), "fast_cat", "bmi", "smoke_level.lab",
-                                 "physact_level", "alch_freq.lab", "dietPC1"))) %>%
-  mutate(incl_compl=ifelse(incl_compl_glu==1 & incl_compl_covars==1, 1, 0)) %>%
-  mutate(N_Ancestry = ifelse(ancestry == ANC, 1, 0),
-         N_geno = ifelse(is.na(haplo_0) == F & is.na(haplo_1) == F,1,0),
-         N_contrl = incl_t2d,
-         N_contrl_compl = ifelse(incl_t2d==1 & incl_compl == 1, 1, 0),
-         N_contrl_compl_kcal = ifelse(incl_t2d==1 & incl_compl==1 & incl_kcal==1, 1, 0),
-         N_contrl_compl_kcal_taste = ifelse(incl_t2d==1 & incl_compl == 1 & incl_kcal==1 & incl_taste==1, 1, 0))
+    n_geno = ifelse(is.na(haplo_0) == F & is.na(haplo_1) == F, 1, 0),
+    n_t2d_data = recode_na_as.fun(t2d_case.f),
+    n_t2d_contrl = ifelse(!is.na(t2d_case.f) & t2d_case.f == "Control", 1, 0),
+    n_glu = recode_na_as.fun(glu, 0),
+    n_a1c = recode_na_as.fun(hba1c),
+    n_glu_5sd = find_outliers.fun(glu, SDs=5, recode_outliers = 0),
+    n_diplo_taste = ifelse(is.na(taster_status) == T | taster_status == "Other", 0, 1),
+    n_diplo_005 = recode_na_as.fun(diplos_common),
+    n_fast = recode_na_as.fun(fasting_hrs),
+    n_fast_24hr = ifelse(fasting_hrs >24, 0, 1),
+    n_24hr = recode_na_as.fun(TCALS),
+    n_24hr_plaus = recode_na_as.fun(kcal_plaus)
+    ) %>%  mutate(n_covars = find_complete_group.fun(
+      c("age", "sex", paste0("gPC", 1:10), "bmi", "smoke_level.lab","physact_level",
+        "alch_freq.lab", "dietPC1"))) %>%
+  mutate(n_complete=ifelse(n_t2d_data==1 & n_geno==1 & n_glu==1 & n_fast == 1 & n_covars==1,1,0)) %>%
+  mutate(N_ancestry = ifelse(ancestry == ANC, 1, 0)) %>%
+  mutate(N_geno_contrl = ifelse(n_geno == 1 & n_t2d_contrl == 1, 1, 0),
+         N_geno_contrl_diplo005 = ifelse(n_geno == 1 & n_t2d_contrl == 1 & n_diplo_005 == 1,1,0),
+         N_geno_contrl_taste = ifelse(n_geno == 1 & n_t2d_contrl == 1 & n_diplo_taste == 1,1,0),
+         N_geno_contrl_taste_compl = ifelse(n_geno == 1 & n_t2d_contrl == 1 & n_diplo_taste == 1 & n_covars==1,1,0),
+         N_geno_contrl_taste_compl_24hrplaus = ifelse(n_geno==1 & n_t2d_contrl == 1 & n_diplo_taste == 1 & n_covars==1 & n_24hr_plaus == 1,1,0)
+         )
 
 
 # ===============================================
@@ -318,7 +333,6 @@ phenos_processed_id <- phenos_processed_id %>%
 
 phenos_processed_id %>% 
   saveRDS(paste0("../data/processed/ukb_analysis_", ANC, ".rda"))
-
 
 cat("Done compiling ukb_analysis_ANC.rda dataset!")
 

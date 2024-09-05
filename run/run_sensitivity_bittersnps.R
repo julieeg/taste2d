@@ -1,7 +1,8 @@
 
-#############################################################
-##  Assoc of Quinine/Caffeine Bitter SNPs with RG & HbA1c  ## 
-#############################################################
+
+###############################################################
+##  Alternative variants for bitter taste: quinine/caffeine  ## 
+###############################################################
 
 # ======================
 ## Set up & load data
@@ -21,7 +22,7 @@ bitter_snps <- read.table("../data/processed/bitter_snps.raw", header = T) %>%
 ## load analysis dataframe
 analysis <- readRDS(paste0("../data/processed/ukb_analysis_", ANC, ".rda")) %>%
   filter(N_contrl_compl==1) %>%
-  filter(is.na(haplo_0) == F & is.na(haplo_1) == F) %>%
+  filter(N_geno == 1) %>%
   filter(fasting_hrs <= 24) 
 
 # create output directories
@@ -67,7 +68,7 @@ bind_rows(
     do.call(rbind.data.frame, lapply(dietPCs, function(PC) {
       print_lm(exposure = snp, outcome = PC, covariates = "age+sex", label = PC) })) %>%
       mutate(SNP = rep(snp, nrow(.)), .before=Model) })) 
-  ) %>% write.csv("../data/processed/analysis/EUR_lm_snps_bitter_diet.csv", row.names=F)
+) %>% write.csv("../data/processed/analysis/EUR_lm_snps_bitter_diet.csv", row.names=F)
 
 
 
@@ -96,8 +97,8 @@ models.l = list("Base"= m1_base, "BMI"=m2_bmi, "Lifestyle"=m3_lifestyle, "Diet.P
 ## Run main effects of taster status on RG
 tab_lm_bitter_rg <- do.call(rbind.data.frame, lapply(bitter_snps, function(snp) {
   do.call(rbind.data.frame, lapply(1:length(models.l), function(i) {
-  print_lm(exposure = snp, outcome = "glu", covariates = models.l[[i]], label=names(models.l)[i], 
-           data = analysis)  })) 
+    print_lm(exposure = snp, outcome = "glu", covariates = models.l[[i]], label=names(models.l)[i], 
+             data = analysis)  })) 
 }))
 
 tab_lm_bitter_rg %>% write.csv(paste0(outDir_pf, "lm_bittersnps_x_rg.csv"), row.names = F)
@@ -111,7 +112,7 @@ tab_lm_bitter_rg %>% write.csv(paste0(outDir_pf, "lm_bittersnps_x_rg.csv"), row.
 tab_lm_bitter_a1c <- do.call(rbind.data.frame, lapply(bitter_snps, function(snp) {
   do.call(rbind.data.frame, lapply(1:length(models.l), function(i) {
     print_lm(exposure = snp, outcome = "hba1c_max", covariates = models.l[[i]], label=names(models.l)[i], 
-                  data = analysis)  })) 
+             data = analysis)  })) 
 }))
 
 tab_lm_bitter_a1c %>% write.csv(paste0(outDir_pf, "lm_bittersnps_x_a1c.csv"), row.names = F)
@@ -133,12 +134,12 @@ names(models.nofast.l) <- names(models.l)
 ## Run main effects of taster status on glucose by fasting time
 tab_lm_bitter_gluXfast <- do.call(rbind.data.frame, lapply(bitter_snps, function(snp) {
   do.call(rbind.data.frame, lapply(fast_cat.l, function(fast) {
-  do.call(rbind.data.frame, lapply(1:length(models.nofast.l), function(i) {
-    as.data.frame(print_lm(exposure = snp, outcome = "glu", covariates = models.nofast.l[[i]], 
-                           label=paste0(fast, "_", names(models.nofast.l)[i]), data=analysis %>% 
-                             filter(fast_cat == fast)))
-  })) %>% mutate(fast=rep(fast, nrow(.)), model_fast=rownames(.), .before=beta)
-    })) 
+    do.call(rbind.data.frame, lapply(1:length(models.nofast.l), function(i) {
+      as.data.frame(print_lm(exposure = snp, outcome = "glu", covariates = models.nofast.l[[i]], 
+                             label=paste0(fast, "_", names(models.nofast.l)[i]), data=analysis %>% 
+                               filter(fast_cat == fast)))
+    })) %>% mutate(fast=rep(fast, nrow(.)), model_fast=rownames(.), .before=beta)
+  })) 
 }))
 
 tab_lm_bitter_gluXfast %>% write.csv(paste0(outDir_pf, "lm_bittersnps_x_gluXfast.csv"), row.names = F)
@@ -151,29 +152,27 @@ tab_lm_bitter_gluXfast %>% write.csv(paste0(outDir_pf, "lm_bittersnps_x_gluXfast
 
 analysis <- analysis %>% mutate(
   rs713598_G.cat = case_when(
-    rs713598_G == 0 ~ "00",
-    rs713598_G == 1 ~ "01",
-    rs713598_G == 2 ~ "11"
+    rs713598_G == 0 ~ "0_0", rs713598_G == 1 ~ "0_1", rs713598_G == 2 ~ "1_1"
   ),
   rs1726866_G.cat = case_when(
-    rs1726866_G == 0 ~ "00",
-    rs1726866_G == 1 ~ "01",
-    rs1726866_G == 2 ~ "11"
+    rs1726866_G == 0 ~ "0_0",
+    rs1726866_G == 1 ~ "0_1",
+    rs1726866_G == 2 ~ "1_1"
   ),
   rs10246939_C.cat = case_when(
-    rs10246939_C == 0 ~ "00",
-    rs10246939_C == 1 ~ "01",
-    rs10246939_C == 2 ~ "11"
+    rs10246939_C == 0 ~ "0_0",
+    rs10246939_C == 1 ~ "0_1",
+    rs10246939_C == 2 ~ "1_1"
   ),
   rs10772420_A.cat = case_when(
-    rs10772420_A == 0 ~ "00",
-    rs10772420_A == 1 ~ "01",
-    rs10772420_A == 2 ~ "11"
+    rs10772420_A == 0 ~ "0_0",
+    rs10772420_A == 1 ~ "0_1",
+    rs10772420_A == 2 ~ "1_1"
   ),
   rs2597979_G.cat = case_when(
-    rs2597979_G == 0 ~ "00",
-    rs2597979_G == 1 ~ "01",
-    rs2597979_G == 2 ~ "11"
+    rs2597979_G == 0 ~ "0_0",
+    rs2597979_G == 1 ~ "0_1",
+    rs2597979_G == 2 ~ "1_1"
   )
 )
 
@@ -182,8 +181,8 @@ bitter_snps_cat <- paste0(bitter_snps, ".cat")
 do.call(rbind.data.frame, lapply(bitter_snps_cat, function(snp) {
   do.call(rbind.data.frame, lapply(fast_cat.l, function(fast) {
     get_emm.fun(exposure = snp, outcome = "glu", covars = models.nofast.l[[4]], 
-                reference = "00",
-                data=analysis %>% filter(fast_cat == fast))$emm })) %>%
+                reference = "",
+                data=bitter %>% filter(fast_cat == fast))$emm })) %>%
     mutate(fast = rep(fast_cat, each=3), .before=emmean) })) %>%
   write.csv(paste0(outDir_pf, "emm_bittersnps_x_gluXfast_diet_v2.csv"), row.names = F)
 

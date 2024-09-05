@@ -1,7 +1,48 @@
 Meeting Notes
 
+IDEAS
+* case-influential statistics for regression models
+* add boxplots of glucose ~ fasting time
+* SES adjustment, as a variable identified as being very different between the two 24HR groups..and glucose; first, see if SES associates with glucose
 
-6/2X/2024 - JEG/MUD
+
+8/28/2024 - JEG/SJC ============
+
+Topics discussed
+- Relayed concerns about ≠ based on 24HR availability
+- Also discussed potential for batch effects (collection date, time between collection to assay (glucose amounts are changeable in the time between blood collection and assay which could be explaining systematically higher RG values if 24HR participants had more immediate blood assays than others who did not do the full phenotyping
+- Realized that the fasting variable was only grabbed for visit 1** need to upate this
+- talked about the general importance of a finding that the UKB glucose variable might have systematic bias, and if so, a "Letter to the Editor" could be neccessary
+- both agreed that the project was intellectually sound, interesting and rooted in a good biological basis (!) but that this is just frustrating 
+
+Next steps
+* Read the UKB manual for glucose (biochemical & NMR) data collection, processing and harmonization --> check for correction factors, or notes that might explain a systematic difference at t0 for 24HR completers/non-completers - DONE 8/28
+* After identifying covariates;
+** Summarize: assay time, collection date, time ≠ assay difference, center, batch by 24HR reporters/non-reporters - DONE 8/29
+** Add covariates to models of glu_msr ~ TAS2R38 to see impact on main effect
+** Run sensitivity analyses to exclude ppl based on assay performance metrics 
+** Look at BM~NMR correlations (but first, confirm if they are from the SAME blood sample) within 24HR reporters/non-reporters; and across batches and assay time/run differences
+ 
+
+8/27/2024 - JEG/MUD ============
+
+Topics discussed
+- JEG showed MUD the spurious differenced in RG and 02hrG by 24HR data plausibility; Decided on next steps
+-- Repeat analysis using other glucose measures (NMR metabolomics measure & measures at second time point) for comparison
+-- Consider reaching out to Magda regarding the fasting time variable for NMR and whether this is the same as the biochemical data
+-- Look into study-wide covariates for NMR (or Biochemical) data that should be adjusted for (e.g., batch, assay date, time, location/center)
+
+Next steps
+* Repeat analysis with NMR and t0/t1 data for both measures
+* Examine differences in RG (for each measure) by fasting time & run associations with TAS2R38 SNPs 
+
+Notes
+- While re-running analyses, I added a FLAG FOR RG >|5SD| --> this is the main distinction between v2 to v3
+-- Before, RG maximum was ~16.5; with SD cut-offs, now the maximum is ~10 (or 12?
+-- With this change, ~577 participants were removed; and the association in the total sample with RG became significant
+
+
+6/24/2024 - JEG/MUD =================
 
 Topics discussed
 -Need to validate the diplotye/diet associations - "Nonstarter, if the diplotypes are not associated with the same diet traits (?)
