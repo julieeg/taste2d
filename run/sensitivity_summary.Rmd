@@ -77,6 +77,21 @@ models.l = list("Base"= m_base, "BMI"=m_bmi, "Lifestyle"=m_lifestyle, "Diet"=m_d
 models.nofast.l <- as.list(gsub("[+]fast_cat", "", models.l)) ; names(models.nofast.l) <- names(models.l)
 ```
 
+## I. Additionally adjust for ALL 24 diet PCs
+
+```{r}
+m_diet_all <- paste0("dietPC",1:24,collapse="+")
+
+make_pretty_lm(rbind.data.frame(
+  print_lm(exposure = "taste_diplos", outcome = "glu", label="Glucose ~ All Diet Patterns", covariates = m_diet_all, lm_trend = T, data = analysis),
+  print_lm(exposure = "taste_diplos", outcome = "glu", label="0-2hr.Glucose ~ All Diet Patterns", 
+           covariates = gsub("[+]fast_cat", "", m_diet_all), lm_trend = T, data = analysis %>% filter(fast_cat=="0to2hr")),
+  print_lm(exposure = "taste_diplos", outcome = "hba1c", label="HbA1c ~ All Diet Patterns", covariates = m_diet_all, lm_trend = T, data = analysis)
+  ) %>% mutate(mod_exp=rownames(.), .before=n) %>% separate(mod_exp, sep="_", into = c("model", "exposure"))) %>%
+  kable(caption="Associations of TAS2R38 with Glycemic Measures, Adjusting for All 24 Diet PCs")
+  
+```
+
 ## I. Additionally adjust for fiber-to-carbohydrate ratio among participants **with 24HR data**
 
 Analyses were performed in a subsample of participants with who completed 24HRs and had plausible values for total energy intake (kcal/day) derived using from self-reported intakes. 

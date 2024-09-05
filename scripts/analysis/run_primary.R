@@ -9,6 +9,7 @@ library(tidyverse) ; library(data.table)
 #command args
 args=commandArgs(trailingOnly = T)
 ANC="EUR"
+tag="v4"
 
 source("../scripts/pantry/pantry.R")
 
@@ -86,7 +87,8 @@ hba1c_var.l <- list(variables = list(hba1c_max = "HbA1c, %"))
 m1_base = "age+sex+gPC1+gPC2+gPC3+gPC4+gPC5+gPC6+gPC7+gPC8+gPC9+gPC10+fast_cat"
 m2_bmi = paste0(m1_base, "+bmi")
 m3_lifestyle = paste0(m2_bmi, "+smoke_level.lab+physact_level+alch_freq.lab")
-m4_diet = paste0(m3_lifestyle, "+dietPC1+dietPC2+dietPC3+dietPC4+dietPC5+dietPC6+dietPC7+dietPC8+dietPC9+dietPC10")
+m4_diet = paste0(m3_lifestyle, "+dietPC3+dietPC4+dietPC6+dietPC11+dietPC12+dietPC13+dietPC15+dietPC16+dietPC17")
+#m4_diet = paste0(m3_lifestyle, "+dietPC1+dietPC2+dietPC3+dietPC4+dietPC5+dietPC6+dietPC7+dietPC8+dietPC9+dietPC10")
 models.l = list("Base"= m1_base, "BMI"=m2_bmi, "Lifestyle"=m3_lifestyle, "Diet.Patterns"=m4_diet)
 
 
@@ -95,17 +97,17 @@ models.l = list("Base"= m1_base, "BMI"=m2_bmi, "Lifestyle"=m3_lifestyle, "Diet.P
 # ===============================
 do.call(rbind.data.frame, lapply(1:4, function(m) {
   print_lm(exposure = "taste_diplos", outcome = "glu", label=names(models.l)[m], 
-           covariates = models.l[[m]], lm_trend = T, data = analysis) } )) %>% 
-    write.csv(paste0(outDir_pf, "lm_diplo_x_rg_v3.csv"), row.names = F)
+           covariates = models.l[[m]], lm_trend = T, data = analysis) } )) %>%
+  mutate(mod_exp=rownames(.), .before=n) %>% separate(mod_exp, sep="_", into = c("model", "exposure")) %>%
+  write.csv(paste0(outDir_pf, "lm_diplo_x_rg_", tag, ".csv"), row.names = F)
 
 ## estimated marginal mean glu in each model
 do.call(rbind.data.frame, lapply(1:length(models.l), function(m) {
-  emm <- get_emm.fun(exposure = "taste_diplos", outcome = "glu", covars = models.l[[m]], reference = "AVI/AVI", 
-                     data=analysis)
+  emm <- get_emm.fun(exposure = "taste_diplos", outcome = "glu", covars = models.l[[m]], reference = "AVI/AVI", data=analysis)
   out <- emm$emm %>% mutate(anv.p=emm$anv.p[1,5])
+  out <- out %>% mutate(model = rep(names(models.l[[m]]), each=3), .before=emmean) 
   return(out) } )) %>%
-  mutate(model = rep(names(models.l[[m]]), each=3), .before=emmean) %>%
-  write.csv(paste0(outDir_pf, "emm_diplo_x_glu_v3.csv"), row.names = F)
+  write.csv(paste0(outDir_pf, "emm_diplo_x_glu_", tag, ".csv"), row.names = F)
 
 
 
@@ -115,17 +117,17 @@ do.call(rbind.data.frame, lapply(1:length(models.l), function(m) {
 do.call(rbind.data.frame, lapply(1:4, function(m) {
   print_lm(exposure = "taste_diplos", outcome = "hba1c", label=names(models.l)[m], 
            covariates = models.l[[m]], lm_trend = T, data = analysis) } )) %>% 
-  write.csv(paste0(outDir_pf, "lm_diplo_x_a1c_v3.csv"), row.names = F)
+  mutate(mod_exp=rownames(.), .before=n) %>% separate(mod_exp, sep="_", into = c("model", "exposure")) %>%
+  write.csv(paste0(outDir_pf, "lm_diplo_x_a1c_", tag, ".csv"), row.names = F)
 
 
 ## estimated marginal mean hba1c in each model
 do.call(rbind.data.frame, lapply(1:length(models.l), function(m) {
-  emm <- get_emm.fun(exposure = "taste_diplos", outcome = "hba1c", covars = models.l[[m]], reference = "AVI/AVI", 
-                     data=analysis)
+  emm <- get_emm.fun(exposure = "taste_diplos", outcome = "hba1c", covars = models.l[[m]], reference = "AVI/AVI", data=analysis)
   out <- emm$emm %>% mutate(anv.p=emm$anv.p[1,5])
+  out <- out %>% mutate(model = rep(names(models.l[[m]]), each=3), .before=emmean) 
   return(out) } )) %>%
-  mutate(model = rep(names(models.l[[m]]), each=3), .before=emmean) %>%
-  write.csv(paste0(outDir_pf, "emm_diplo_x_a1c_v3.csv"), row.names = F)
+  write.csv(paste0(outDir_pf, "emm_diplo_x_a1c_",tag,".csv"), row.names = F)
 
 
 
@@ -136,12 +138,22 @@ do.call(rbind.data.frame, lapply(1:4, function(m) {
   print_lm(exposure = "taste_diplos", outcome = "glu", label=names(models.nofast.l)[m], 
            covariates = models.nofast.l[[m]], lm_trend = T, data = analysis %>%
              filter(fast_cat == "0to2hr")) })) %>% 
-  write.csv(paste0(outDir_pf, "lm_diplo_x_2hrg_v3.csv"), row.names = F)
+  mutate(mod_exp=rownames(.), .before=n) %>% separate(mod_exp, sep="_", into = c("model", "exposure")) %>%
+  write.csv(paste0(outDir_pf, "lm_diplo_x_2hrg_",tag,".csv"), row.names = F)
   
+## estimated marginal mean 2hr-glucose in each model
+do.call(rbind.data.frame, lapply(1:length(models.l), function(m) {
+  emm <- get_emm.fun(exposure = "taste_diplos", outcome = "glu", covars = models.nofast.l[[m]], reference = "AVI/AVI", 
+                     data=analysis %>% filter(fast_cat=="0to2hr"))
+  out <- emm$emm %>% mutate(anv.p=emm$anv.p[1,5])
+  out <- out %>% mutate(model = rep(names(models.nofast.l[[m]]), each=3), .before=emmean) 
+  return(out) } )) %>%
+  write.csv(paste0(outDir_pf, "emm_diplo_x_a1c_",tag,".csv"), row.names = F)
+
 
 
 ## ======================================================
-##  Canonical diplotypes & Gu over ALL fasting winodows 
+##  Canonical diplotypes & Glu over ALL fasting winodows 
 ## ======================================================
 
 fast_cat <- c("0to2hr", "3hr", "4hr", "5hr", "6+hr")
@@ -154,20 +166,21 @@ names(models.nofast.l) <- names(models.l)
 ## TAS2R38 diplotpes & Glu by fasting time ------------
 do.call(rbind.data.frame, lapply(fast_cat.l, function(fast) {
   do.call(rbind.data.frame, lapply(1:4, function(m) {
-    print_lm(exposure = "taste_diplos", outcome = "glu", label=paste0(fast, ": ", names(models.nofast.l)[m]), 
+    print_lm(exposure = "taste_diplos", outcome = "glu", label=paste0(fast, "_", names(models.nofast.l)[m]), 
              covariates = models.nofast.l[[m]], lm_trend = T, data = analysis %>%
                filter(fast_cat == fast)) })) })) %>% 
-    write.csv(paste0(outDir_pf, "lm_diplo_x_gluXfast_v3.csv"), row.names = F)
+  mutate(mod_exp=rownames(.), .before=n) %>% separate(mod_exp, sep="_", into = c("fast", "model", "exposure")) %>%
+    write.csv(paste0(outDir_pf, "_diplo_x_gluXfast_",tag,".csv"), row.names = F)
 
 
-## TAS2R38 diplotype & Glu by fasting time --------------
-do.call(rbind.data.frame, lapply(fast_cat.l, function(fast) {
-  get_emm.fun(exposure = "taste_diplos", outcome = "glu", 
-              covars = models.nofast.l[[4]], reference = "AVI/AVI", 
-              data=analysis %>% filter(fast_cat == fast))$emm })) %>%
-  mutate(fast = rep(fast_cat, each=3), .before=emmean) %>%
-  write.csv(paste0(outDir_pf, "emm_diplo_x_gluXfast_diet_v3.csv"), row.names = F)
-
+## estimated marginal mean glucose for all fasting times in DIET model
+do.call(rbind.data.frame, lapply(fast_cat.l, function(f) {
+  emm <- get_emm.fun(exposure = "taste_diplos", outcome = "glu", covars = models.nofast.l$Diet.Patterns, reference = "AVI/AVI", 
+                     data=analysis %>% filter(fast_cat==f))
+  out <- emm$emm %>% mutate(anv.p=emm$anv.p[1,5])
+  out <- out %>% mutate(fast = rep(f, each=3), .before=emmean) 
+  return(out) } )) %>%
+  write.csv(paste0(outDir_pf, "emm_diplo_x_gluXfast_diet_",tag,".csv"), row.names = F)
 
 
 ########################
@@ -191,45 +204,6 @@ pct_beta_change.fun(m_base$coef[2,1], m_bmi$coef[2,1]) #1.063%
 pct_beta_change.fun(m_bmi$coef[2,1], m_life$coef[2,1]) #8.6%
 #Food choices
 pct_beta_change.fun(m_life$coef[2,1], m_food$coef[2,1]) #3.9
-
-
-
-#######################################################
-## Re-Run primary analysis with significant dietPCs  ##
-#######################################################
-
-## Model covariates
-m3_lifestyle = paste0(m2_bmi, "+smoke_level.lab+physact_level+alch_freq.lab")
-m4_diet = paste0(m3_lifestyle, "+dietPC1+dietPC2+dietPC3+dietPC4+dietPC5+dietPC6+dietPC7+dietPC8+dietPC9+dietPC10")
-m_diet_signif = paste0(m3_lifestyle, "+dietPC3+dietPC4+dietPC6+dietPC11+dietPC12+dietPC13+dietPC15+dietPC16+dietPC17")
-m_diet_all = paste0(m3_lifestyle, paste0("+dietPC", 1:24, collapse = "+"))
-models.l = list("Lifestyle"=m3_lifestyle, "Top10.Diet.Patterns"=m4_diet, "Signig.Diet.Patterns"=m_diet_signif, "All.Diet.Patterns"=m_diet_all)
-models.nofast.l <- as.list(gsub("[+]fast_cat", "", models.l)) ; names(models.nofast.l) <- names(models.l)
-
-
-## Diplotype & RG ==========
-do.call(rbind.data.frame, lapply(1:4, function(m) {
-  print_lm(exposure = "taste_diplos", outcome = "glu", label=names(models.l)[m], 
-           covariates = models.l[[m]], lm_trend = T, data = analysis) } )) %>% 
-  write.csv(paste0(outDir_pf, "lm_diplo_x_rg_diet_covars.csv"), row.names = F)
-
-
-## Diplotype & 2hrGlu ==========
-do.call(rbind.data.frame, lapply(1:4, function(m) {
-  print_lm(exposure = "taste_diplos", outcome = "glu", label=names(models.no.fast.l)[m], 
-           covariates = models.no.fast.l[[m]], lm_trend = T, data = analysis %>% filter(fast_cat=="0to2hr")) } )) #%>% 
-#write.csv(paste0(outDir_pf, "lm_diplo_x_rg_v3.csv"), row.names = F)
-
-
-## estimated marginal mean glu in each model
-do.call(rbind.data.frame, lapply(1:length(models.nofast.l), function(m) {
-  emm <- get_emm.fun(exposure = "taste_diplos", outcome = "glu", covars = models.nofast.l[[m]],
-                     reference = "AVI/AVI", data=analysis %>% filter(fast_cat == "0to2hr"))
-  out <- emm$emm %>% mutate(anv.p=emm$anv.p[1,5])
-  return(out) } )) %>%
-  mutate(model = rep(names(models.l[[m]]), each=3), .before=emmean) #%>%
-  #write.csv(paste0(outDir_pf, "emm_diplo_x_glu_v3.csv"), row.names = F)
-
 
 
 

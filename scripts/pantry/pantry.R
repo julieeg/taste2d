@@ -343,8 +343,10 @@ make_pretty_lm <- function(lm_table, digits=c(3,6)) {
     mutate(across(ends_with("_p"), ~as.numeric(., d_pval))) %>%
     mutate(across(ends_with("_p"), ~round(., d_pval))) %>%
     mutate(beta_se = sprintf("%s (%s, %s)", round(beta, d_est), round(beta-1.96*se, d_est), round(beta+1.96*se, d_est))) %>%
-    mutate(exp = gsub(".*[_]", "", rownames(.)), .before=n) %>%
-    mutate(Model=rownames(.)) %>%
+    rowwise() %>%
+    mutate(exp = ifelse("exposure" %in% names(lm_table), exposure, gsub(".*[_]", "", rownames(.)))) %>%
+    mutate(Model=ifelse("model" %in% names(lm_table), model, rownames(.))) %>%
+    ungroup() %>%
     rename_with(~paste0(toupper(gsub("[_].*", "", .)), ".test_P"), ends_with("_p")) %>%
     select(Model, Exposure=exp, N=n, Beta_95CI=beta_se, P=p, ends_with("_P")) %>%
     mutate_all(~ifelse(is.na(.), "-", .)) %>%
