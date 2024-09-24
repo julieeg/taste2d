@@ -69,7 +69,7 @@ bind_rows(
       mutate(SNP = rep(snp, nrow(.)), .before=Model) })) 
   ) %>% write.csv("../data/processed/analysis/EUR_lm_snps_bitter_diet.csv", row.names=F)
 
-
+tab<-read.csv("../data/processed/analysis/EUR_lm_snps_bitter_diet.csv")
 
 ############################
 ###   Primary Analysis   ###

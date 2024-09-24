@@ -50,6 +50,15 @@ base_phenos_id <- base_phenos %>%
 withdrawn_consent <- scan("/humgen/florezlab/UKBB_app27892/withdraw/withdraw27892_232_14_Nov_2022.txt", what=character())
 
 
+### Assessment Center --------------------------------
+ac_labs <- c("Barts"=11012, "Birmingham" = 11021, "Bristol" =	11011, "Bury" =	11008, 
+             "Cardiff" =	11003, "Cheadle (revisit)" =	11024, "Croydon" =	11020, 
+             "Edinburgh" =	11005, "Glasgow" = 11004, "Hounslow" = 11018, "Leeds" = 11010,
+             "Liverpool"=11016, "Manchester"=11001, "Middlesborough"=11017, "Newcastle" =11009, 
+             "Nottingham"=11013, "Oxford"=11002, "Reading"=11007, "Sheffield"=11014, "Stockport (pilot)"=10003,
+             "Stoke"=11006, "Swansea"=	11022,"Wrexham" =11023, "Cheadle (imaging)"=11025,
+             "Reading (imaging)"=11026, "Newcastle (imaging)" =11027, "Bristol (imaging)"=11028)
+
 
 ### Education level ---------------------------------------------------
 

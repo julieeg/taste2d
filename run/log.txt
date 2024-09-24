@@ -6,6 +6,23 @@ IDEAS
 * SES adjustment, as a variable identified as being very different between the two 24HR groups..and glucose; first, see if SES associates with glucose
 
 
+9/17/2024
+-Presented all results (compiled by today) to Joanne Cole over zoom; ran through the main tables/figures and then discussed the sensitiity analyses, with the goal of figuring out what is needed, what is missing and if this is a complete story;
+-- Discussed the sex-specificity for PC11 and PC12 -- she agreed this was interesting (and also said hmm to the sex-specific heritability part)
+-- Suggested re-running PCAs on age/sex-adjusted diet traits (or would have recommended doing this up-front;  but at this point, i should be ok)
+-- Agreed about adding sex-stratified exploratory analyses, especially if I saw it (since it wouldnt be enough for a standa alone paper): language like, sex-stratified found more only) significant associations in males not females but we don't now why or how to explain this
+-- Commented on the covariates: BMI being a "precision covariate" (one that takes away residual error that might be masking the association) versus true confounders ... BMI makes sense, but she wasnt convinced that the diet/lifestyle covariates were really doing what we expected them to, especially since adjusting for them had literally ZERO impact on the effect estimates..
+
+Next step: 
+- run an intermediate analysis to see if lifestyle/diet covariates DO capture what we think (ie they account for expected variance) by testing their associations with glycemic traits
+- add a full SES model (primary or full sensitivity) given how timely this is these days and that it can be a real predictor of diet and glycemic outcomes
+- brainstormed an idea for subsetting data by extremes for diet, then looking if the genetic influence is comparable
+
+
+9/11/2024
+-Note that today you **finally** just used the 'lazy' covariate of assessment center (UKB field 54, named ac) as a factor variable to see if that attenuates the 24HR effect on blood glucose and, when you added that in, the differences were attenuated...so we are adding that in as a covariate in THE WHOLE ANALYSIS --> this will be demarcated as "v5", separate from v4, whch was largely characterized by the different diet PC adjustments (for what is sigificant, not just the top 10)
+
+
 8/28/2024 - JEG/SJC ============
 
 Topics discussed

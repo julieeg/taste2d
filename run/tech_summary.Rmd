@@ -1,9 +1,8 @@
 ---
-title: "glucose_summary"
+title: "sensitivity_summary-technical covariates & other glucose measures"
 output: html_document
 date: "2024-08-29"
 ---
-
 
 
 ```{r setup, include=FALSE, echo=F}
@@ -21,13 +20,21 @@ source("../scripts/pantry/pantry.R", echo=F)
 ###############################
 ##   Load data for EUR only  ##
 ###############################
-ANC="EUR"
 
-#load data for EUR ancestry
+# system arguments
 EUR=c("European"="EUR")
-all <- readRDS(paste0("../data/processed/ukb_analysis_", ANC, ".rda")) %>% 
-  mutate(n_glucose_sensitivity_all=ifelse(n_geno==1 & n_t2d_contrl==1 & n_covars==1 & n_fast==1 & n_fast_24hr==1,1,0)
-  )
+tag="v4"
+
+# load analysis dataframe
+all <- readRDS(paste0("../data/processed/ukb_analysis_", EUR, ".rda")) %>%
+  mutate(n_glucose_sensitivity_all=ifelse(n_geno==1 & n_t2d_contrl==1 & n_covars==1 & n_fast==1 & n_fast_24hr==1,1,0))
+
+glucose <- all %>%
+  filter(ancestry=="EUR" & n_geno==1 & n_t2d_contrl == 1 &
+           n_glu == 1 & n_complete == 1 & n_fast_24hr == 1) %>%
+  filter(find_outliers.fun(glu)==0) %>%
+  mutate(n_24hr.lab = ifelse(n_24hr==1, "Has 24HR", "No 24HR")) %>%
+  mutate(n_24hr_plaus.lab = factor(ifelse(n_24hr_plaus, "Plausible 24HR", "No 24HR"), levels=c("Plausible 24HR", "No 24HR")))
 
 # load additional glucose data
 glu_biochem <- readRDS("../data/processed/ukb_glucose_assays.rda")
@@ -112,11 +119,12 @@ decr_vars <- c(
   bmi="BMI, kg/m2", smoke_level.lab="Smoking",
   physact_level="Physical Activity, MET/wk",
   alch_freq.lab="Alcohol Frequency", educ_level.lab="Education Level",
+  educ_isced.lab="Education Level (ISCED)",
   income_level.lab = "Income Level")
 
 print_summary_table(data=glucose, var_strata = "n_24hr.lab", vars_to_summarize = decr_vars,
                     factor_vars = c("taste_diplos", "smoke_level.lab", "physact_level",
-                                    "alch_freq.lab", "educ_level.lab", "income_level.lab"), p_print=T) %>% 
+                                    "alch_freq.lab", "educ_level.lab", "educ_isced.lab", "income_level.lab"), p_print=T) %>% 
   kable(caption="Sample characteristics by 24HR data availability")
 ```
 
@@ -309,6 +317,7 @@ p_bar_gluc_24hr_aliquot <- glucose %>%
 ggarrange(p_box_glu_24hr_qliquot, p_bar_gluc_24hr_aliquot, nrow=1, ncol=2, align = "hv", common.legend = T)
 ```
 *Note* the significant differene in sample dilution b/w 24HR groups at both time points; but much more so at v0")
+
 
 ### Recalling differences in SES by 24HR
 Re-examing SES differences by 24HR and whether this captures the influence of 24HR on glucose

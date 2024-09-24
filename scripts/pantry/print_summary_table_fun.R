@@ -52,7 +52,7 @@ print_summary_table <- function(
   d_cont = digits[1] ; d_pct = digits[2] ; d_pval=digits[3]
   
   #Pvalue adjustments
-  if(p_adjust == "agesex") { p_adjust_vars = c("age", "sex") } else {
+  if(p_adjust[1] == "agesex") { p_adjust_vars = c("age", "sex") } else {
     p_adjust_vars = p_adjust }
   
   #Strata var order, if different from variable coding (default = F)

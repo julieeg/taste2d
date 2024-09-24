@@ -42,6 +42,33 @@ diet_labels <- c(
   hotdrink_temp_hot_or_vhot_vs_warm_BIN="Prefer hot drinks"
 )
 
+diet_labels_descriptive <- c(
+  raw_veg_QT="Raw vegetable intake",
+  cooked_veg_QT="Cooked vegetable intake",
+  fresh_fruit_QT="Fresh fruit intake",
+  dried_fruit_QT="Dried fruit intake",
+  oily_fish_QT="Oily fish intake",
+  nonoily_fish_QT="Non-oily fish intake",
+  procmeat_QT="Processed meat intake",
+  poultry_QT="Poultry intake",
+  cheese_QT="Cheese intake",
+  beef_QT="Beef intake",
+  lamb_QT="Lamb intake",
+  pork_QT="Pork intake",
+  bread_type_white_vs_brown_or_whole_BIN="Prefer white>brown/whole bread",
+  bread_intake_QT="Bread intake",
+  milk_type_full_vs_low_or_nonfat_BIN="Prefer full>low/no-fat milk",
+  cereal_type_sugar_vs_any_bran_BIN="Prefer sugary>bran cereal",
+  coffee_type_decaf_vs_regular_BIN="Prefer decaf>caffeinated coffee",
+  cereal_intake_QT="Cerealintake",
+  spread_type_butter_vs_any_other_BIN="Prefer butter>other spreads",
+  coffee_QT="Coffee intake",
+  tea_QT="Tea intake",
+  water_QT="Water intake",
+  addsalt_always_often_vs_nrs_BIN="Always/often add salt",
+  hotdrink_temp_hot_or_vhot_vs_warm_BIN="Prefer hot>warm drink temps"
+)
+
 dietVars <- c("raw_veg_QT", "cooked_veg_QT", "fresh_fruit_QT", "dried_fruit_QT", "oily_fish_QT", "nonoily_fish_QT", 
               "procmeat_QT", "poultry_QT", "cheese_QT", "beef_QT", "lamb_QT",  "pork_QT", "bread_type_white_vs_brown_or_whole_BIN",
               "bread_intake_QT", "milk_type_full_vs_low_or_nonfat_BIN", "cereal_type_sugar_vs_any_bran_BIN", "cereal_intake_QT", 
@@ -236,27 +263,28 @@ print_lm <- function(exposure="taste_diplos", outcome="glu", covariates=m, label
   if(label==F) {label <- outcome}
   
   # For categorical exposure variable 
-  if(is.numeric(data[, ..exposure][[1]]) == F) {
+  if(is.numeric(data[[exposure]]) == F) {
     nX <- length(mod$xlevels[[exposure]])
     out<-matrix(NA, nX, 6, dimnames = list(paste0(label, "_", mod$xlevels[[exposure]]), c("n", "beta", "se", "p", "f", "f_p")))
     out[2:nrow(out),c(2:4)] <- summary(mod)$coef[2:nX, c(1:2,4)] ; out[1,5:6] <-c(anova(mod)[1,4], anova(mod)[1,5])
     out[,1] <- as.vector(table(mod$model[[exposure]]))
     # If lm_trend should be printed
     if(lm_trend == T) {
-      exposure_num <- as.numeric(data[, ..exposure][[1]])
+      exposure_num <- as.numeric(data[[exposure]])
       data <- data %>% mutate(exposure.num=exposure_num)
       lm.trend <- as.vector(summary(lm(formula(paste0(outcome, "~exposure.num+", covariates)), data))$coef[2,])
-      out <- as.data.frame(out) %>% mutate(t_p=c(lm.trend[4], rep(" ", nX-1) )) } 
-  } ; 
+      out <- as.data.frame(out) %>% mutate(trend_p=c(lm.trend[4], rep(" ", nX-1) )) } 
+  } 
   
   # For continuous exposure variable
-  if(is.numeric(data[, ..exposure][[1]]) == T) {
-    out<-matrix(NA, 1, 4, dimnames = list(exposure, c("Model", "beta", "se", "p")))
-    out[2:4] <- summary(mod)$coef[2,c(1:2,4)]
-    out[,1] <- NA ; out[,1] <- label
+  if(is.numeric(data[[exposure]]) == T) {
+    out<-matrix(NA, 1, 5, dimnames = list(exposure, c("n", "Model", "beta", "se", "p")))
+    out[3:5] <- summary(mod)$coef[2,c(1:2,4)]
+    out[,1] <-length(mod$fitted.values) ; out[,2] <- NA ; out[,2] <- label
+    out <- as.data.frame(out) %>% mutate(across(c("beta", "se", "p"), ~as.numeric(.)))
     } 
   
-  # If values should be rouded
+  # If values should be rounded
   if(round == T) {
     out <- data.frame(out) %>%
       mutate(across(c("beta", "se"), ~round(as.numeric(.), digits[1]))) %>%
@@ -281,9 +309,10 @@ print_glm <- function(exposure="taste_diplos", outcome, covariates=m, label, dat
   
   # For continuous exposure variable
   if(is.numeric(data[, ..exposure][[1]]) == T) {
-    out<-matrix(NA, 1, 4, dimnames = list(exposure, c("Model", "beta", "se", "p")))
-    out[2:4] <- summary(mod)$coef[2,c(1:2,4)]
-    out[,1] <- NA ; out[,1] <- label
+    out<-matrix(NA, 1, 5, dimnames = list(exposure, c("n", "Model", "beta", "se", "p")))
+    out[3:5] <- summary(mod)$coef[2,c(1:2,4)]
+    out[,1] <-length(mod$fitted.values) ; out[,2] <- NA ; out[,2] <- label
+    out <- as.data.frame(out) %>% mutate(across(c("beta", "se", "p"), ~as.numeric(.)))
   }
   
   return(as.data.frame(out))
@@ -337,23 +366,39 @@ print_lm_interaction <- function(exposure="taste_diplos", interaction, outcome="
 ## Make print_lm tables "pretty"
 # ===================================
 
-make_pretty_lm <- function(lm_table, digits=c(3,6)) {
+make_pretty_lm <- function(lm_table, digits=c(3,6), show_SE=F) {
+  
+  # Set parameters
   d_est<-digits[1];d_pval<-digits[2]
+  if("exposure" %in% names(lm_table)) {exp <- lm_table$exposure} else {exp <-gsub(".*[_]", "", rownames(lm_table))}
+  if("model" %in% names(lm_table)) {mod <- lm_table$model} else {mod <-gsub("[_].*", "", rownames(lm_table))}
+  if("X" %in% names(lm_table)) {mod <- lm_table$X} else {mod <-gsub("[_].*", "", rownames(lm_table))}
+  
+  se<- as.numeric(lm_table$se)
+  
+  #Rename P-values if only p detected
   pretty_table <- lm_table %>%
     mutate(across(ends_with("_p"), ~as.numeric(., d_pval))) %>%
     mutate(across(ends_with("_p"), ~round(., d_pval))) %>%
-    mutate(beta_se = sprintf("%s (%s, %s)", round(beta, d_est), round(beta-1.96*se, d_est), round(beta+1.96*se, d_est))) %>%
-    rowwise() %>%
-    mutate(exp = ifelse("exposure" %in% names(lm_table), exposure, gsub(".*[_]", "", rownames(.)))) %>%
-    mutate(Model=ifelse("model" %in% names(lm_table), model, rownames(.))) %>%
-    ungroup() %>%
-    rename_with(~paste0(toupper(gsub("[_].*", "", .)), ".test_P"), ends_with("_p")) %>%
-    select(Model, Exposure=exp, N=n, Beta_95CI=beta_se, P=p, ends_with("_P")) %>%
+    mutate(beta_se = sprintf("%s (%s, %s)", round(beta, d_est), round(beta-1.96*se, d_est), round(beta+1.96*se, d_est)))
+  if("f" %in% names(pretty_table) & nrow(pretty_table) > 1) {
+    pretty_table <- pretty_table %>% 
+      mutate(Exposure=exp, Model=mod) %>% 
+      mutate_at("p", ~round(as.numeric(.), d_pval)) %>%
+      rename(P_t.test=p) %>%
+      rename_with(~paste0("P_", gsub("[_].*", "", .), ".test"), ends_with("_p"))
+  } else {
+    pretty_table <- pretty_table %>% 
+      mutate_at("p", ~round(as.numeric(.), d_pval)) %>%
+      rename(P_t.test=p) %>% mutate(Exposure=rownames(.), N=n)
+  } ; pretty_table <- pretty_table %>%
+    select(Model, Exposure, N=n, Beta_95CI=beta_se, starts_with("P")) %>%
     mutate_all(~ifelse(is.na(.), "-", .)) %>%
-    mutate_at("Beta_95CI", ~ifelse(. == "NA (NA, NA)", "-", .)) %>%
-    mutate(Model = gsub("[_].*", "", Model)) #%>%
-  #  tibble()
-  rownames(pretty_table) <- NULL
+    mutate_at("Beta_95CI", ~ifelse(. == "NA (NA, NA)", "-", .))
+  
+  if(show_SE==T) { pretty_table <- pretty_table %>% mutate(SE=ifelse(is.na(se), "-", round(se, d_pval)), .after=Beta_95CI) } else{
+    pretty_table <- pretty_table
+  } ; rownames(pretty_table) <- NULL
   
   return(pretty_table)
 }
@@ -468,6 +513,22 @@ ggtheme_fancy <- theme_bw() +
         strip.text = element_text(face="bold", size=8)
   )
 
+ggtheme_figures <- theme(axis.text.x = element_text(color="black", size=8), 
+        axis.text.y = element_text(color="black", size=8),
+        axis.title = element_text(color="black", size=9),
+        panel.background = element_rect(color="#00000010"),
+        legend.position = "right", 
+        #legend.box.background = element_rect(color = "black"),
+        #legend.key.size = unit(0.5, 'line'),
+        legend.margin = margin(0.5,0.5,0.5,0.5, unit="pt"),
+        legend.text = element_text(size=8), 
+        legend.title = element_text(face="bold", size=8),
+        plot.title=element_text(size=8),
+        strip.text = element_text(face="bold", size=8)
+  )
+
+
+
 ggtheme_waterfall <- 
   theme_bw() +
   theme(panel.grid.major.x = element_blank(), 
@@ -489,30 +550,35 @@ library("paletteer") ; library("RColorBrewer")
 palettes <- list(NatComms= paletteer_d("ggsci::nrc_npg", n=10),
                  greens5 = paletteer_dynamic("cartography::green.pal", 5),
                  greens = rev(paletteer_dynamic("cartography::green.pal", 10)),
-                 pugr = c("#9C50CE", "#9C50CE95","#30900195", "#309001"),
-                 #oranges5 = rev(paletteer_dynamic("cartography::orange.pal", 5)),
                  oranges = rev(paletteer_dynamic("cartography::orange.pal", 10)),
-                 #blues5 = rev(paletteer_dynamic("cartography::blue.pal", 5)),
                  blues = rev(paletteer_dynamic("cartography::blue.pal", 10)),
                  purples=rev(paletteer_dynamic("cartography::purple.pal", 10))[3:10],
-                 CovarGroups=c(brewer.pal(9,"Oranges")[4:6], brewer.pal(9, "Greens")[5:4], 
-                               brewer.pal(9, "Blues")[5:6],  brewer.pal(9, "Purples")[c(8:4)], 
-                               brewer.pal(9, "PiYG")[1:3], brewer.pal(9, "PuRd")[5:6]),
                  nature_main4=c("#888363","#C5C1A5", "#96A0B3", "#435269"),
-                 nature_diplosAA_canonical=c("AVI/AVI"="#CB9B23", "AVI/AAV"="grey50", "AVI/PAV"="#E96900",
-                                   "PAV/PAV"="#0096A0", "AAV/PAV"="grey50"),
-                 nature_haplos=c("AVI"="#CB9B23","PAV"="#0096A0", "AAV"="grey50","PVI"="grey50"),
                  
-                 nature_diplosAA_canonical_yrb=c("AVI/AVI"="#957628", "AVI/AAV"="grey50", "AVI/PAV"="#00488D",
-                                             "PAV/PAV"="#8F2F24", "AAV/PAV"="grey50"),
-                 nature_haplos_yrb=c("AVI"="#957628","PAV"="#8F2F24", "AAV"="grey50","PVI"="grey50"),
-                 hm_palette = colorRampPalette(c("#888363", "white", "#435269"))(n=100),
+                 #Categorical/assigned 
+                 #nature_haplos_yrb=c("AVI"="#957628","PAV"="#8F2F24", "AAV"="grey50","PVI"="grey50"),
+                 nature_haplos_dominant=c("AVI"="#C5C1A5", "AAV"="grey80", "PVI"="grey80", "PAV"="#96A0B3"),
+                 #nature_diplosAA_canonical_yrb=c("AVI/AVI"="#957628", "AVI/AAV"="grey50", "AVI/PAV"="#00488D", "PAV/PAV"="#8F2F24", "AAV/PAV"="grey50"),
+                 #nature_diplos_canonical=c("AVI/AVI"="#888363", "AVI/AAV"="grey80", "AVI/PAV"="#AEB1AC", "PAV/PAV"="#435269", "AAV/PAV"="grey80"),
+                 nature_diplos_dominant=c("AVI/AVI"="#C5C1A5", "AVI/AAV"="grey80", "AVI/PAV"="#96A0B3", "PAV/PAV"="#435269", "AAV/PAV"="grey80"),
+                 
+                 # Diverging heatmaps
+                 #hm_palette = colorRampPalette(c("#888363", "white", "#435269"))(n=100),
+                 hm_palette_rwb = colorRampPalette(c("#00488D", "white", "#8F2F24"))(n=100),
                  hm_corr_blue = colorRampPalette(c("white", "#CAE5EF", "#96CED4", "#48BDBC", "#0096A0"))(n=100),
-                 plaus_24hr=c("grey38", "forestgreen"),
-                 has_24hr=c("forestgreen", "grey38")
+                 
+                 #Binary codings
+                 plaus_24hr=c("forestgreen", "grey38"), has_24hr=c("forestgreen", "grey38"),
+                 
+                 #3-level continuous
+                 alleles_greyblue = c("#C6CAD6", "#96A0B3", "#6D788D"),
+                 alleles_yellows = c("#F3DD92", "#E9C550", "#CB9B23"),
+                 alleles_browns=c("#DDBCA1", "#BC9778", "#744F3D")
 )
 
 
+
+#A5A083
 
 # ============================================
 ## ggplot themes
