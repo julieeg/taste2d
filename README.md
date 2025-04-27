@@ -5,10 +5,12 @@
 
 #### Prepare UKB data
 Prep UKB phenotypes & genotypes 
+
 qsub ../scripts/data_prep/prep_ukb_phenos.sh
 qsub ../scripts/data_prep/prep_phasing.sh
 
 Run postprocessing to prepare analytical dataset
+
 qsub ../scripts/data_prep/postprocess_ukb_data.sh 
 
 Sync data to local R for analysis
