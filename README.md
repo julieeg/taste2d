@@ -3,11 +3,11 @@
 # Last Update: 04-26-2025
 
 
-#Prepare ukb phenotypes & genotypes 
+#### Prepare ukb phenotypes & genotypes 
 qsub ../scripts/data_prep/prep_ukb_phenos.sh
 qsub ../scripts/data_prep/prep_phasing.sh
 
-#Run postprocessing to prepare analytical dataset
+#### Run postprocessing to prepare analytical dataset
 qsub ../scripts/data_prep/postprocess_ukb_data.sh 
 
 #sync data to local R for analysis
