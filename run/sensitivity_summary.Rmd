@@ -7,10 +7,10 @@ date: "2024-09-05"
 ```{r setup, include=FALSE, echo=F}
 knitr::opts_chunk$set(echo = F, error = F, warning = F, out.width = "110%", out.height = "50%")
 
-lapply(c("tidyverse", "data.table", "paletteer", "ggpubr", "gplots",
-         "R3port", "xtable", "knitr", "tinytex"),  library, character.only = TRUE)
+lapply(c("tidyverse", "data.table", "paletteer", "ggpubr", #"gplots",
+          "xtable", "knitr", "tinytex"),  library, character.only = TRUE)
 
-source("../scripts/pantry/pantry.R", echo=F)
+source("../scripts/pantry.R", echo=F)
 
 ```
 
@@ -23,40 +23,26 @@ source("../scripts/pantry/pantry.R", echo=F)
 
 # system arguments
 EUR=c("European"="EUR")
-tag="v5"
+tag="v6"
+ANC="EUR"
 
-# load analysis dataframe
-EUR.df <- readRDS(paste0("../data/processed/ukb_analysis_", EUR, ".rda")) %>%
+# load postprocessed dataframe
+postprocessed <- readRDS("../data/processed/ukb_postprocessed_EUR.rda") %>%
   mutate(N_sensitivity=ifelse(n_geno==1 & n_t2d_contrl==1 & n_covars==1 & n_fast==1 & n_fast_24hr==1,1,0))
 
-analysis <- EUR.df %>%
-  filter(ancestry=="EUR" & n_geno==1 & n_t2d_contrl == 1 &
-           n_glu == 1 & n_complete == 1 & n_fast_24hr == 1) %>%
-  filter(find_outliers.fun(glu)==0) %>%
+analysis <- readRDS(paste0("../data/processed/ukb_analysis_", ANC, ".rda")) %>%
   mutate(n_24hr.lab = ifelse(n_24hr==1, "Has 24HR", "No 24HR")) %>%
   mutate(n_24hr_plaus.lab = factor(ifelse(n_24hr_plaus, "Plausible 24HR", "No 24HR"), levels=c("Plausible 24HR", "No 24HR")))
 
 #load dietPCs
 dietPCs.dat <- readRDS(paste0("../data/processed/diet/ukb_EUR_dietPCs.rda"))
-dietPC_emm <- read.csv(paste0("../data/processed/descr_emm_dietPC_diplos_sexage_",tag,".csv"))
+dietPC_emm <- read.csv(paste0("../data/processed/descr_tab_emm_dietPC_diplos_sexageac_",tag,".csv"))
 
 #Set variables for workflow
 n24HR.l <- c("Has 24HR", "No 24HR")
 n24HR_plaus.l <- c("Plausible 24HR", "No 24HR")
 
 dim(analysis) #N=241378
-
-
-## Add Assessment Center ----------------------------------------------------------
-ac_labs <- list("Barts"=11012, "Birmingham" = 11021, "Bristol" =	11011, "Bury" =	11008, 
-             "Cardiff" =	11003, "Cheadle (revisit)" =	11024, "Croydon" =	11020, 
-             "Edinburgh" =	11005, "Glasgow" = 11004, "Hounslow" = 11018, "Leeds" = 11010,
-             "Liverpool"=11016, "Manchester"=11001, "Middlesborough"=11017, "Newcastle" =11009, 
-             "Nottingham"=11013, "Oxford"=11002, "Reading"=11007, "Sheffield"=11014, "Stockport (pilot)"=10003,
-             "Stoke"=11006, "Swansea"=	11022,"Wrexham" =11023, "Cheadle (imaging)"=11025,
-             "Reading (imaging)"=11026, "Newcastle (imaging)" =11027, "Bristol (imaging)"=11028)
-
-analysis <- analysis %>% mutate(ac.f = descr_label.fun(., "ac", ac_labs))
 
 ```
 
@@ -67,57 +53,116 @@ analysis <- analysis %>% mutate(ac.f = descr_label.fun(., "ac", ac_labs))
 n_sensitivity <- c(n_geno = "Genotyping, n(%)", n_t2d_contrl="T2D controls, n(%)" ,
   n_covars="Complete covariate data, n(%)", n_fast="Complete fasting data, n(%)",
   n_fast_24hr="Complete fasting data for <24hr, n(%)", n_24hr= "Available 24HR data, n (%)",
-  N_sensitivity="Total sample for sensitivity analysis, N (%)")
-print_summary_table(data=EUR.df, var_strata = F, vars_to_summarize = n_sensitivity,
-                    factor_vars = c(names(n_sensitivity)), p_print=F) %>% 
+  N_sensitivity="Total sample for sensitivity analysis, N (%)") ; print_summary_table(
+    data=postprocessed, var_strata = F, vars_to_summarize = n_sensitivity,
+    factor_vars = c(names(n_sensitivity)), p_print=F) %>% 
   kable(caption="Sensitivity analysis sample among all EUR participants")
 ```
 
 ```{r}
-# primary models
-m1_base = "age+sex+gPC1+gPC2+gPC3+gPC4+gPC5+gPC6+gPC7+gPC8+gPC9+gPC10+fast_cat"
+m1_base = "age+sex+gPC1+gPC2+gPC3+gPC4+gPC5+gPC6+gPC7+gPC8+gPC9+gPC10+ac.f+fast_cat"
 m2_bmi = paste0(m1_base, "+bmi")
-m3_lifestyle = paste0(m2_bmi, "+smoke_level.lab+physact_level+alch_freq.lab")
+m3_lifestyle = paste0(m2_bmi, "+smoke_level.lab+physact_level.lab+alch_freq.lab")
 m4_diet = paste0(m3_lifestyle, "+dietPC3+dietPC4+dietPC6+dietPC11+dietPC12+dietPC13+dietPC15+dietPC16+dietPC17")
-#m4_diet = paste0(m3_lifestyle, "+dietPC1+dietPC2+dietPC3+dietPC4+dietPC5+dietPC6+dietPC7+dietPC8+dietPC9+dietPC10")
 models.l = list("Base"= m1_base, "BMI"=m2_bmi, "Lifestyle"=m3_lifestyle, "Diet.Patterns"=m4_diet)
 
 # sensitivity models
-m_diet_all = paste0(m4_diet, "+", paste0("dietPC",11:24,collapse = "+"))
-m_f2c = paste0(m4_diet, "+FIB2CHO")
-m_ses = paste0(m_f2c, "+income_level.lab+educ_level.lab")
-m_center = paste0(m_f2c, "+ac")
+ms_ses = paste0(m4_diet, "+income_level.lab+educ_isced.lab")
+ms_diet_all = paste0(m3_lifestyle, "+", paste0("dietPC",1:24,collapse = "+"))
+ms_f2c = paste0(m4_diet, "+FIB2CHO")
+ms_f2c_ses = paste0(m4_diet, "+FIB2CHO+income_level.lab+educ_isced.lab")
+ms_tech = paste0(m4_diet, "+gluB_aliquot.0+gluB_assay_date.0+dilution")
+ms_covars = gsub("alch_freq.lab", "alch_drinks_per_week", gsub("physact_level.lab", "physact_met_excess", m4_diet))
 
-models.l = list("Base"= m1_base, "BMI"=m2_bmi, "Lifestyle"=m3_lifestyle, "Diet"=m4_diet, "Fib2Car"=m_f2c, "SES"=m_ses, "Assessment.Center"=m_center)
+models.l = list("Base"= m1_base, "BMI"=m2_bmi, "Lifestyle"=m3_lifestyle, "Diet.Patterns"=m4_diet)
 models.nofast.l <- as.list(gsub("[+]fast_cat", "", models.l)) ; names(models.nofast.l) <- names(models.l)
+models.sensitivity.l = list("Diet.Patterns"=m4_diet, "SES"=ms_ses, "All.Diet.PCs"=ms_diet_all, "Fib2Carb"=ms_f2c, "Fib2Carb+SES"=ms_f2c_ses, 
+                            "Technical"=ms_tech, "Alt.Covariates"=ms_covars)
+models.sensitivity.nofast.l <- as.list(gsub("[+]fast_cat", "", models.sensitivity.l)) ; names(models.sensitivity.nofast.l) <- names(models.sensitivity.l)
 ```
 
-## Covariate Checks
+## Sensitivy Models
+
+### Covariate sensitivty/precision
 Are covariates capturing expected/intended variance?
 ```{r}
+# associations of covariates with glycemic outcomes
+read.csv(paste0("../data/processed/sens_tab_lm_allglycemic_lifestyle_ses_mBMI_mgdl_",tag,".csv")) %>%
+  kable(caption="Associations of lifestyle/ses covariates with glycemic measures")
+read.csv(paste0("../data/processed/sens_tab_lm_allglycemic_covars_dietPCs_mgdl_",tag,".csv")) %>%
+  kable(caption="Associations of dietPC covariates with glycemic measures")
 
-read.csv(paste0("../data/processed/sensitivity_lm_2hg_lifestyle_ses_base.csv")) 
+read.csv(paste0("../data/processed/sens_tab_lm_allglycemic_lifestyle_ses_cont_mBMI_mgdl_",tag,".csv")) %>%
+  kable(caption="Associations of lifestyle/ses *more precise* covariates with glycemic measures")
 
+# sensitivity models with alternative covariate coding
+make_pretty_lm( read.csv(paste0("../data/processed/sens_tab_lm_all_tastediplos_mAltCovars_mDietAltCovars_",tag,".csv")) ) %>%
+  kable(caption="Sensitivity models with *more precise* covariates")
 ```
 
+```{r, include=F}
+dpc1_median=quantile(analysis$dietPC1, probs=seq(0,1,0.5), include.lowest=F)[-1]
+dpc1_tertiles=quantile(analysis$dietPC1, probs=seq(0,1,0.33), include.lowest=F)[-1]
 
-## I. Additionally adjust for SES
+## Based on dietPC1 (generally healthy/unhealthy indicators)
+analysis <- analysis %>% mutate(
+  dpc1_med = factor(ifelse(dietPC1 >= dpc1_median[1],"Above","Below"), levels=c("Below", "Above")),
+  dpc1_tert = factor(case_when(dietPC1<dpc1_tertiles[1] ~ "Low",
+                          dietPC1>=dpc1_tertiles[1] & dietPC1<dpc1_tertiles[2] ~ "Moderate",
+                          dietPC1>dpc1_tertiles[2] ~ "High"), levels=c("Low", "Moderate", "High"))
+)
 
+# models stratified by 'healthy/less healthy' diets based on dietPC1
+read.csv("../data/processed/sens_tab_descr_dPC1median_v6.csv") %>% kable()
+ggarrange(analysis %>% ggplot(aes(x=glu, fill=dpc1_med)) + geom_histogram(bins=100, alpha=0.6),
+          analysis %>% ggplot(aes(x=glu2hr, fill=dpc1_med)) + geom_histogram(bins=100, alpha=0.6),
+          analysis %>% ggplot(aes(x=hba1c, fill=dpc1_med)) + geom_histogram(bins=100, alpha=0.6), nrow=1, common.legend = T)
+
+make_pretty_lm( read.csv(paste0("../data/processed/sens_tab_lm_allglycemic_tastediplos_dPC1median_mSES_mgdl_",tag,".csv")) ) %>%
+  kable(caption="Sensitivity models below/above dPC1 median ")
+
+# models stratified by 'lower healthy/less healthy' diets based on dietPC1
+read.csv("../data/processed/sens_tab_descr_dPC1tertile_v6.csv") %>% kable()
+ggarrange(analysis %>% ggplot(aes(x=glu, fill=dpc1_tert)) + geom_histogram(bins=100, alpha=0.6),
+          analysis %>% ggplot(aes(x=glu2hr, fill=dpc1_tert)) + geom_histogram(bins=100, alpha=0.6),
+          analysis %>% ggplot(aes(x=hba1c, fill=dpc1_tert)) + geom_histogram(bins=100, alpha=0.6), ncol=3, common.legend = T)
+
+make_pretty_lm( read.csv(paste0("../data/processed/sens_tab_lm_all_tastediplos_dPC1tertile_",tag,".csv")) ) %>%
+  kable(caption="Sensitivity models with *more precise* covariates")
+```
+
+Re-run with continuous fasting hours
 ```{r}
-make_pretty_lm(read.csv(paste0("../data/processed/lm_sens_diplos_rg_2hg_m_DietSES_",tag,".csv")) %>% 
-                 separate(X, sep="_", into=c("model", "exposure"))) %>%
-  kable(caption="Associations of TAS2R38 with Glycemic Measures, Adjusting for SES")
+make_pretty_lm(read.csv(paste0("../data/processed/sens_tab_lm_allglycemic_tastediplos_mFastHrs_mgdl_",tag,".csv"))) %>% 
+  kable(caption="Adjusting for continuous fasting hours")
+
+## Plot of model fit with categorical vs continuous fasting variable
+models.fasthrs.l <- lapply(models.l, function(m) gsub("fast_cat", "fasting_hrs", m))
+#adjR2_fast <- do.call(rbind, lapply(1:4, function(m) {
+#  cbind(cat=summary(lm(formula(paste0("glu_mgdl~taste_diplos+", models.l[[m]])), data=analysis))$adj.r.squared,
+#        cont=summary(lm(formula(paste0("glu_mgdl~taste_diplos+", models.fasthrs.l[[m]])),data=analysis))$adj.r.squared
+#  )})) ; adjR2_fast %>% kable(caption="Adjusted R2 in primary models with categorical or continuous fasting")
+```
+
+**
+### Additionally adjust for SES
+```{r}
+make_pretty_lm(read.csv(paste0("../data/processed/sens_tab_lm_rg_2hg_tastediplos_mSES_mgdl_",tag,".csv"))) %>% 
+  kable(caption="Associations of TAS2R38 with Glycemic Measures, additionally adjusting for SES")
   
 ```
 
-## I. Additionally adjust for ALL 24 diet PCs
-
+**
+### Additionally adjust for ALL 24 diet PCs
 ```{r}
-make_pretty_lm(read.csv(paste0("../data/processed/lm_sens_diplos_rg_2hg_m_allDietPC_",tag,".csv")) %>% 
-                 separate(X, sep="_", into=c("model", "exposure"))) %>%
+make_pretty_lm(read.csv(paste0("../data/processed/sens_tab_lm_rg_2hg_tastediplos_mAllDietPC_mgdl_",tag,".csv"))) %>% 
   kable(caption="Associations of TAS2R38 with Glycemic Measures, Adjusting for All 24 Diet PCs")
-  
+
+make_pretty_lm(read.csv(paste0("../data/processed/sens_tab_lm_allglycemic_tastediplos_num_mAllDietPC_mgdl_",tag,".csv"))) %>% 
+  kable(caption="Associations of continuous TAS2R38 with Glycemic Measures, Adjusting for All 24 Diet PCs")
+
 ```
+
 
 ## II. Additionally adjust for fiber-to-carbohydrate ratio 
 
@@ -127,19 +172,8 @@ Plausible energy intake was defined as:
 *for M: 600- 4880 kcal/day (~20 MJ)
 *for F: 600- 4300 kcal/day (~18 MJ)
 
-```{r}
-read.csv(paste0("../data/processed/descr_sens_24HRplaus_",tag,".csv")) %>% 
-  kable(caption="Decription of subsample with available and plausible 24HR data")
-make_pretty_lm(print_lm(exposure = "taste_diplos", outcome = "glu", 
-         covariates = paste0(models.nofast.l$Diet, "+income_level.lab+educ_isced.lab"),
-         data=analysis %>% filter(fast_cat=="0to2hr"), label="Diet+SES")) %>% kable()
-
-read.csv(paste0("../data/processed/descr_sens_24HR_center_",tag,".csv")) %>%
-  kable(caption="Assessment Center x 24HR")
-```
-
+```{r, fig.width=12, include=F}
 #### Bar plots of RG by 24HR data & fasting time 
-```{r, fig.width=12}
 # RG --------------
 analysis %>%
   group_by(n_24hr_plaus.lab) %>%
@@ -169,185 +203,229 @@ analysis %>%
 
 **Stratified models by 24HR data**
 ```{r}
-make_pretty_lm(read.csv(paste0("../data/processed/lm_sens_24hr_diplos_rg_2hg_m_dietF2Cses_",tag,".csv"))) %>%
-  select(-"Exposure") %>%
-  kable(caption="TAS2R38 diplotype with RG & 2hr glucose, adjusting for Fiber-to-Carbohydrate ratio ")
+#descriptive tables
+read.csv(paste0("../data/processed/sens_descr_tab_24HRplaus_",tag,".csv")) %>% 
+  kable(caption="Decription of subsample with available and plausible 24HR data")
+read.csv(paste0("../data/processed/sens_descr_tab_24HR_center_",tag,".csv")) %>%
+  kable(caption="Assessment Center x 24HR")
 
+# Add adjustment for f2b and f2c+ses
+make_pretty_lm( read.csv(paste0("../data/processed/sens_tab_lm_allglycemic_tastediplo_mF2C_mgdl_",tag,".csv")), digits=c(3,3)) %>%
+  kable(caption="TAS2R38 diplotype with RG & 2hr glucose, adjusting for Fiber-to-Carbohydrate ratio (& SES) ")
 
-make_pretty_lm(read.csv(paste0("../data/processed/lm_sens_no24hr_diplos_rg_2hg_m_dietF2Cses_",tag,".csv"))) %>%
-  select(-"Exposure") %>%
-  kable(caption="TAS2R38 diplotype with RG & 2hr glucose, in subset without 24HR data (comparison) ")
+make_pretty_lm( read.csv(paste0("../data/processed/sens_tab_lm_allglycemic_tastediplo_num_mF2C_mgdl_",tag,".csv")), digits=c(3,3)) %>%
+  kable(caption="Additive TAS2R38 diplotype with RG & 2hr glucose, adjusting for Fiber-to-Carbohydrate ratio (& SES) ")
 
-```
-
-#### First, try adjusting the models for technical covariates to see if that explains apparent differences in glucose between 24HR groups
-Based on the differenes in assay performance between the two subgroups, and the effect these differences seem to have on glucose levels between the strata, we ran sensitivity models to see what happens to the overall effect when we additionally adjusting for assay performance, and if the apparent differences by 24HR are attenuated when adjusting, as well.   
-
-```{r, include=F}
-# load additional glucose data
-tech <- readRDS("../data/processed/ukb_glucose_assays.rda") %>% select(id, ends_with(".0") | ends_with(".0.lab"))
-tech <- analysis %>% left_join(tech, by="id") %>% 
-  mutate(glu_2hg = ifelse(fast_cat=="0to2hr", glu, NA))
-
-summary(lm(formula(paste0("glu_2hg~n_24hr.lab+age+sex")), data=tech))
-summary(lm(formula(paste0("glu_2hg~n_24hr.lab+age+sex+ac.f")), data=tech))
-summary(lm(formula(paste0("glu_2hg~n_24hr.lab+age+sex+ac.f+educ_isced.lab+income_level.lab")), data=tech))
-
-print_lm(exposure = "n_24hr.lab", outcome="glu_2hg", covariates = "age+sex+ac.f", data=tech, label="Age+Sex")
-print_lm(exposure = "n_24hr.lab", outcome="glu_2hg", covariates = "age+sex+ac.f+dilution.0+gluB_aliquot.0.lab", data=tech, label="Age+Sex+AC+Technical")
-print_lm(exposure = "n_24hr.lab", outcome="glu_2hg", covariates = "age+sex+educ_isced.lab+income_level.lab", data=tech, label="Age+Sex")
-print_lm(exposure = "n_24hr.lab", outcome="glu_2hg", covariates = "age+sex+dilution.0+gluB_aliquot.0.lab", data=tech, label="Age+Sex+AC+Technical")
-print_lm(exposure = "n_24hr.lab", outcome="glu_2hg", covariates = "age+sex+ac.f", data=tech, label="Age+Sex+AC")
-print_lm(exposure = "n_24hr.lab", outcome="glu_2hg", covariates = "age+sex+ac.f+educ_isced.lab+income_level.lab", data=tech, label="Age+Sex+AC+SES")
+# for comparison, sample without 24hr data
+make_pretty_lm(read.csv(paste0("../data/processed/sens_tab_lm_rg_2hg_tastediplos_mNoF2C_mgdl_",tag,".csv")), digits=c(3,3)) %>%
+  kable(caption="TAS2R38 diplotype with RG & 2hr glucose, among sample without F2C data")
+make_pretty_lm(read.csv(paste0("../data/processed/sens_tab_lm_rg_2hg_tastediplos_num_mNoF2C_mgdl_",tag,".csv")), digits=c(3,3)) %>%
+  kable(caption="Additive TAS2R38 diplotype with RG & 2hr glucose, among sample without F2C data")
 
 ```
 
-#### NOTE: apparent confounding of SES on TAS2R38-glucose associations in the subsample without 24HR data
-Based on a suggestion from KEW, consider whether this might be reflective of underlying associations of gPCs (10-20) with SES by additionally adjusting for all 20 gPCs in the diet model and comparing the changes in effect estimates
+### Sex-stratified models
 ```{r}
-gPCs <- fread("../data/processed/ukb_gPCs_EUR.csv") %>% select(id, c(paste0("gPC", 11:20)))
-analysis <- left_join(analysis, gPCs, by = "id")
-
-m_20gPCs <- paste0(m4_diet, "+", paste0("gPC", 11:20, collapse = "+"))
-models.gPC.no24hr.l = as.list(gsub("[+]FIB2CHO", "", c(models.l, "20gPCs"=m_20gPCs))) ; names(models.gPC.no24hr.l) = c(names(models.l), "20gPCs")
-models.gPC.no24hr.nofast.l = as.list(gsub("[+]fast_cat", "", gsub("[+]FIB2CHO", "", models.gPC.no24hr.l))) ; 
-names(models.gPC.no24hr.nofast.l) = names(models.gPC.no24hr.l)
-
-# No 24HR data (Diet vs. SES vs gPC)
-bind_rows(do.call(rbind.data.frame, lapply(c(4,6:7), function(m) { 
-  make_pretty_lm(print_lm(
-    exposure = "taste_diplos", outcome = "glu", label= paste0("No 24HR: RG~", names(models.gPC.no24hr.l)[m]), 
-    covariates = models.gPC.no24hr.l[[m]], lm_trend = T, data = analysis %>% filter(n_24hr_plaus.lab==n24HR_plaus.l[[2]]) )) } )),
-  do.call(rbind.data.frame, lapply(c(4,6:7), function(m) { make_pretty_lm(print_lm(
-    exposure = "taste_diplos", outcome = "glu", label= paste0("No 24HR: 2hr Glu~", names(models.gPC.no24hr.nofast.l)[m]), 
-    covariates = models.gPC.no24hr.nofast.l[[m]], lm_trend = T, data = analysis %>% 
-      filter(fast_cat=="0to2hr" & n_24hr_plaus.lab==n24HR_plaus.l[[2]] ) )) } )) ) %>% 
-  kable(caption="TAS2R38 diplotype with RG & 2hr glucose, in subset without 24HR data ")
-
-#Had 24HR data (Diet vs. SES vs gPC)
-bind_rows(do.call(rbind.data.frame, lapply(c(4,6:7), function(m) { 
-  make_pretty_lm(print_lm(
-    exposure = "taste_diplos", outcome = "glu", label= paste0("Has 24HR: RG~", names(models.gPC.no24hr.l)[m]), 
-    covariates = models.gPC.no24hr.l[[m]], lm_trend = T, data = analysis %>% filter(n_24hr_plaus.lab==n24HR_plaus.l[[1]]) )) } )),
-  do.call(rbind.data.frame, lapply(c(4,6:7), function(m) { make_pretty_lm(print_lm(
-    exposure = "taste_diplos", outcome = "glu", label= paste0("Has 24HR: 2hr Glu~", names(models.gPC.no24hr.nofast.l)[m]), 
-    covariates = models.gPC.no24hr.nofast.l[[m]], lm_trend = T, data = analysis %>% 
-      filter(fast_cat=="0to2hr" & n_24hr_plaus.lab==n24HR_plaus.l[[1]] ) )) } )) ) %>% 
-  kable(caption="TAS2R38 diplotype with RG & 2hr glucose, in subset with 24HR data ")
-
+make_pretty_lm(read.csv(paste0("../data/processed/sens_tab_lm_allglycemic_tastediplos_sexStrat_mDiet_mgdl_",tag,".csv"))) %>%
+  kable(caption="Sex-stratified associations")
 ```
-
 
 ## II. Examine bitter SNPs (caffeine & quinine) as negative controls
 
 Alternative genetic instruments were used for bitter taste as a negative control
 
 ```{r}
-snps_bitter_diet <- read.csv("../data/processed/descr_sens_bitterSNPs_dietBitter.csv")
+snps_bitter_diet <- read.csv(paste0("../data/processed/sens_descr_tab_bitterDiet_bitterSNPs_",tag,".csv"))
+make_pretty_lm(snps_bitter_diet %>% rename(outcome=Model, exposure=SNP) %>% mutate(model="Age,Sex,gPCs")) %>%
+  kable(caption = "GLMs for other bitter SNPs with dietary habits & PCs")
 
 snps_bitter_diet.mat <- as.matrix(
-  snps_bitter_diet %>% select(SNP, Diet_Trait=Model, Beta=beta) %>%
+  snps_bitter_diet %>% dplyr::select(SNP, Diet_Trait=Model, Beta=beta) %>%
   pivot_wider(values_from=Beta, names_from=Diet_Trait) %>%
-  select(-SNP) %>% t()
+  dplyr::select(-SNP) %>% t()
 ) ; colnames(snps_bitter_diet.mat) <- unique(snps_bitter_diet$SNP)
 
-heatmap.2(t(snps_bitter_diet.mat),
-          col=palettes$hm_palette_rwb,
-          scale = "none", 
-          linecol =  "black",
-          Rowv=T, Colv=F,
-          density.info = "none", trace = "none", margins = c(6,7),
-          dendrogram = "none", #key="False",
-          cexRow = 0.75, cexCol = 0.75,
-          offsetRow=0, offsetCol = 0) 
+#heatmap.2(t(snps_bitter_diet.mat),
+#          col=palettes$hm_palette_rwb, scale = "none", 
+#          linecol =  "black", Rowv=T, Colv=F,
+#          density.info = "none", trace = "none", margins = c(6,7),
+#          dendrogram = "none", #key="False",
+#          cexRow = 0.75, cexCol = 0.75,
+#          offsetRow=0, offsetCol = 0) 
+
+
 ```
 
 #### Associations of other bitter SNPs with glycenic measures 
 ```{r}
-
 bitter_snps <- c("rs713598_G", "rs1726866_G", "rs10246939_C", "rs10772420_A", "rs2597979_G")
 
-# RG & A1c -------------
-make_pretty_lm(read.csv(paste0("../data/processed/lm_sens_bittersnps_rg_",tag,".csv"))) %>%
-  separate(Model, sep="_", c("SNP", "EA", "Model")) %>%
-  unite("SNP_EA", c("SNP", "EA"), sep="_") %>%
-  select(Model, SNP_EA, Beta_95CI, starts_with("P_")) %>%
-  kable(caption = "Bitter SNPs & RG")
+#make_pretty_lm(read.csv(paste0("../data/processed/sens_tab_lm_allglycemic_bittersnps_mgdl_",tag,".csv"))) %>%
+#  filter(Exposure %in% c("rs10772420_A", "rs2597979_G")) %>%
+#  kable(caption = "Bitter SNPs & Glycemic Measures")
 
-# Glu x fasting time --------------
-make_pretty_lm(read.csv(paste0("../data/processed/lm_sens_bittersnps_2hg_",tag, ".csv"))) %>% 
-  separate(Model, sep="_", c("SNP", "EA", "Model")) %>%
-  unite("SNP_EA", c("SNP", "EA"), sep="_") %>%
-  select(Model, SNP_EA, Beta_95CI, starts_with("P_")) %>%
-  kable(caption = "Bitter SNPs & 0-2hr Glucose")
+make_pretty_lm(read.csv(paste0("../data/processed/sens_tab_lm_gluXfast_bittersnps_mDiet_mgdl_",tag,".csv"))) %>%
+  filter(Exposure %in% c("rs10772420_A", "rs2597979_G")) %>%
+  kable(caption = "Bitter SNPs & Glucose by fasting time") 
+
+
 ```
 
 #### Estimated marginal mean 0-2hr glucose for other SNPs
 ```{r, fig.width=10, fig.height=8, include=F}
 
-emm_bittersnp_xgluFast <- read.csv(paste0("../data/processed/lm_emm_sens_bittersnps_gluXfast_m_diet_",tag,".csv"))
+emm_bittersnp_x_gluFast <- read.csv(paste0("../data/processed/sens_tab_emm_gluXfast_bittersnps_mDiet_mgdl_",tag,".csv"))
 bitter_snps_cat <- paste0(bitter_snps, ".cat")
 
-# Bar plot ---------------
-p_emm_bittersnps_x_gluFast <- emm_bittersnp_xgluFast %>%
-  mutate(fast = factor(fast, levels=c("6+hr", "5hr", "4hr", "3hr", "0to2hr"),
+# Dot plot ---------------
+p_emm_bittersnps_x_gluFast <- 
+emm_bittersnp_x_gluFast %>% as.data.frame() %>%
+  dplyr::mutate(fast = factor(fast, levels=c("6+hr", "5hr", "4hr", "3hr", "0to2hr"),
                        labels =c(">6 hrs", "5 hrs", "4 hrs", "3 hrs", "0-2 hrs")),
-         Genotypes = factor(exp, levels=c("0_0","0_1", "1_1"), labels=c("00", "01", "11")), .before=outcome) %>%
-  mutate(SNP = rep(bitter_snps, each=15), .before=exp) %>%
+         Genotypes = factor(level, levels=c("0_0","0_1", "1_1"), labels=c("00", "01", "11")), .before=outcome) %>%
+  mutate(SNP = rep(bitter_snps, each=15), .before=level) %>%
   mutate(Gene = c(rep("TAS2R38-PROP/PTC", 15*3), rep(c("TAS2R19-Quinine", "TAS2R14-Caffeine"), each=15))) %>%
   mutate(color = paste0(Gene, ".", Genotypes)) %>%
   mutate(SNP_Taste = ifelse(SNP %in% c(bitter_snps[1:3]), "TAS2R38 Bitter Taste Receptor", "Other bitter taste perception")) %>%
   filter(fast == "0-2 hrs") %>%
-  ggplot(aes(y=emmean-4.88, x=SNP, ymin=lower.CL-4.88, ymax=upper.CL-4.88, color=color)) + 
-  scale_y_continuous(limits=c(0,0.1), breaks=seq(0,0.1,0.02), labels = seq(0,.1,0.02)+4.88) +
+  ggplot(aes(y=emmean-88.25, x=SNP, ymin=lowCI-88.25, ymax=upCI-88.25, color=color)) + 
+  scale_y_continuous(limits=c(-0.5,2), breaks=seq(-0.5,2,0.5), labels = seq(-0.5,2,0.5)+88) +
   facet_grid(~Gene, space="free_x", scales="free_x") +
-  geom_hline(yintercept = seq(4.88,4.98,0.02)-4.88, linewidth=0.15, color="grey") +
-  geom_point(position=position_dodge(1)) + geom_errorbar(position=position_dodge(1)) + 
-  scale_color_manual(values=c(palettes$alleles_browns, palettes$alleles_yellows, palettes$alleles_greyblue), name="Genotype") 
-  
-  geom_bar(stat = "identity", position=position_dodge(0.9)) + 
-  geom_errorbar(width=0.35, position=position_dodge(0.9), linewidth=0.75, color="#00000090") + 
-  ggtheme_basic + 
-  ylab("Marginal mean (95% CI) 0-2hr glucose, mmol/L") + 
-  xlab(" ") + 
-  theme(axis.title = element_text(face="bold", size=10),
-        axis.text = element_text(size=12),
-        legend.position = "none")
+  #geom_hline(yintercept = seq(4.88,4.98,0.02)-4.88, linewidth=0.15, color="grey") +
+  geom_point(position=position_dodge(0.55), size=2) + 
+  geom_errorbar(position=position_dodge(0.55), linewidth=0.75, width=0.55) + 
+  scale_color_manual(values=c(palettes$alleles_browns, palettes$alleles_yellows, palettes$alleles_greyblue), name="Genotype") + 
+  ylab("Marginal Mean (95% CI)\nGlucose Level, mg/dL") + xlab("") +
+  theme_bw() +
+  theme(legend.position = "bottom",
+        legend.title = element_text(face="bold", size=9),
+        axis.title = element_text(size=12), 
+        axis.text.x = element_text(size=10, color="black"), axis.text.y = element_text(size=10, color="black"),
+        panel.grid.major.y = element_line(), 
+        strip.background = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.grid.major.x = element_blank(),
+        panel.background = element_rect(fill="#00000000"),
+        strip.text = element_text(face="bold", size=10)
+  ) ; p_emm_bittersnps_x_gluFast
 
-#p_emm_bittersnps_x_gluFast %>% ggsave(filename="../output/plot_emmm_bittersnps_2hrglu_v3.pdf", height = 4, width = 6)
-p_emm_bittersnps_x_gluFast
+p_emm_bittersnps_x_gluFast %>% ggsave(filename="../output/plot_emm_glu2hr_mgdl_bitterSNPs_mDiet_v6_wh.png", height=3.75, width=7)
+
 ```
+
+```{r, include=F}
+
+## Overall all fasting windows?
+emm_bittersnp_x_gluFast %>% as.data.frame() %>%
+  dplyr::mutate(fast = factor(fast, levels=c("6+hr", "5hr", "4hr", "3hr", "0to2hr"),
+                       labels =c(">6 hrs", "5 hrs", "4 hrs", "3 hrs", "0-2 hrs")),
+         Genotypes = factor(level, levels=c("0_0","0_1", "1_1"), labels=c("00", "01", "11")), .before=outcome) %>%
+  mutate(SNP = rep(bitter_snps, each=15), .before=level) %>%
+  mutate(Gene = c(rep("TAS2R38-PROP/PTC", 15*3), rep(c("TAS2R19-Quinine", "TAS2R14-Caffeine"), each=15))) %>%
+  mutate(color = paste0(Gene, ".", Genotypes)) %>%
+  mutate(SNP_Taste = ifelse(SNP %in% c(bitter_snps[1:3]), "TAS2R38 Bitter Taste Receptor", "Other bitter taste perception")) %>%
+  #filter(fast == "0-2 hrs") %>%
+  ggplot(aes(y=fast, x=emmean-88.25,xmin=lowCI-88.25, xmax=upCI-88.25, color=color, group=fast)) + 
+  #scale_y_continuous(limits=c(0,1.5), breaks=seq(0,1.5,0.5), labels = seq(0,1.5,0.5)+88) +
+  facet_grid(~Gene, space="free_x", scales="free_x") +
+  #geom_hline(yintercept = seq(4.88,4.98,0.02)-4.88, linewidth=0.15, color="grey") +
+  geom_point(position=position_dodge2(0.35)) + geom_errorbar(position=position_dodge2(), width=0.35) + 
+  scale_color_manual(values=c(palettes$alleles_browns, palettes$alleles_yellows, palettes$alleles_greyblue), name="Genotype")
+
+
+```
+
+## Causal Panel plots 
 ```{r}
-# Dot plot ---------------
-lm_bittersnps_alleles_2hg <- read.csv(paste0("../data/processed/lm_sens_bittersnps_alleles_2hg_",tag,".csv"))
-lm_bittersnps_alleles_2hg %>%
-  mutate(hold=gsub(paste0(".*.a", "[_]"), "", X)) %>%
-  mutate(Model=gsub("[_].*", "", hold)) %>%
-  mutate(Genotype=gsub(".*[_]", "", hold)) %>%
-  mutate(SNP = gsub("[.].*", "", X)) %>%
-  mutate(low.ci=beta-1.96*se, up.ci=beta+1.96*se) %>%
-  mutate_at("beta", ~ifelse(is.na(beta), 0, beta)) %>%
-  mutate(Gene = c(rep("TAS2R38-PROP/PTC", 21*3), rep(c("TAS2R19-Quinine", "TAS2R14-Caffeine"), each=21))) %>%
-  mutate(color = paste0(Gene, ".", rep(0:2,5))) %>%
-  filter(Model == "Diet") %>%
-  mutate(genotype=as.factor(rep(0:2, 5)))%>%
+#negative control data
+negcont <- read.csv(paste0("../data/processed/sens_tab_lm_gluXfast_bittersnps_mDiet_mgdl_",tag,".csv")) %>%
+  filter(model %in% c("BMI", "Diet.Patterns") & fast == "0to2hr") %>%
+  arrange(model) %>%
+  mutate(Bitter_SNP = factor(exposure, levels=rev(bitter_snps)),
+         Model = factor(model, levels=c("Diet.Patterns", "BMI")))
 
-  ggplot(aes(x=SNP, group=genotype, y=beta, ymin=low.ci, ymax=up.ci, color=color)) +
-  facet_grid(~Gene, space="free_x", scales="free_x") +
-  geom_hline(yintercept =0, linetype="solid", color="black", size=0.25) +
-  geom_point(position = position_dodge(1), size=2) + geom_errorbar(position = position_dodge(1), width=0.5, linewidth=.75) +
-  scale_y_continuous(limits=c(-0.05,0.05)) + 
-  scale_color_manual(values=c(palettes$alleles_browns, palettes$alleles_yellows, palettes$alleles_greyblue, palettes$alleles_greyblue, palettes$alleles_greyblue), name="Genotype") +
-  ggtheme_basic +
-  ylab("Marginal mean (95% CI) 0-2hr glucose, mmol/L") + 
-  xlab(" ") + 
-  theme(axis.title.y = element_text(face="bold", size=10),
-        axis.text = element_text(size=8),
-        legend.position = "none")
+#independent replication data
+repl <- read.csv("../data/meta_analysis_2hg.csv") %>%
+  filter(Trait == "0to2hrG_adjBMI") %>%
+  select(snp=SNP, beta=BETA, se=SE, n=N) %>%
+  rbind.data.frame(c("rs10772420_A", 0.009, 0.019, 0.6293),
+                   c("rs2597979_G", 0.018, 0.025, 0.471)) %>% 
+  mutate(Gene = c(rep("TAS2R38 (PROP/PTC)",3), "TAS2R19 (quinine)", "TAS2R14 (caffeine)")) %>%
+  mutate(across(c("beta", "se", "n"), ~as.numeric(.))) %>%
+  mutate(Bitter_SNP = factor(c("rs713598_G", "rs1726866_G", "rs10246939_C", "rs10772420_A", "rs1868769_G*"), 
+                             levels=c("rs1868769_G*", rev(bitter_snps)[-1])),
+         Model = "BMI") %>%
+  mutate(across(c("beta", "se"), ~.*18.018))
+
+#figure theme
+fig3_theme <- theme_bw() + 
+  theme(panel.grid.major.y = element_blank(), panel.grid.minor.y = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        axis.text = element_text(color="black"),
+        legend.key.size = unit(0.5, "cm"),
+        legend.margin = margin(0.5,0.5,0.5,0.5),
+        legend.key.spacing = unit(0.1, "cm"),
+        legend.title = element_text(face="bold"),
+        legend.position = "right")
+```
+
+```{r}
+# Replication in OGTT  
+p_negcont <- negcont %>%
+  mutate(Gene = rep(c(rep("TAS2R38 (PROP/PTC)",3), "TAS2R19 (quinine)", "TAS2R14 (caffeine)"), 2)) %>%
+  ggplot(aes(x=beta, xmin=beta-1.96*se, xmax=beta+1.96*se, y=Bitter_SNP, color=Gene, shape=Model)) +
+  geom_vline(xintercept = 0, color="black", linewidth=0.25) +
+  geom_errorbarh(height=0.25, position=position_dodge(0.5), linewidth=0.25) + 
+  geom_point(size=2, position=position_dodge(0.5)) + 
+  scale_shape_manual(values=c(19,1)) + 
+  scale_x_continuous(limits = c(-0.5, 0.5))  +
+  xlab("Beta (95% CI)") + ylab("") +
+  scale_color_manual(values=c(palettes$alleles_browns[3], palettes$alleles_yellows[3], palettes$alleles_greyblue[3]), name="Gene (tastant)") + 
+  fig3_theme
+
+p_repl <- repl %>%
+  ggplot(aes(x=beta, xmin=beta-1.96*se, xmax=beta+1.96*se, y=Bitter_SNP, color=Gene, shape=Model)) +
+  geom_vline(xintercept = 0, color="black", linewidth=0.25) +
+  geom_point(size=2, position=position_dodge(0.5)) + 
+  geom_errorbarh(height=0.25, position=position_dodge(0.5), linewidth=0.25) + 
+  scale_shape_manual(values=1) + 
+  scale_x_continuous(limits = c(-1.25, 1.25))  +
+  xlab("Beta (95% CI)") + ylab("") +
+  scale_color_manual(values=c(palettes$alleles_browns[3], palettes$alleles_yellows[3], palettes$alleles_greyblue[3]), name="Gene (tastant)") + 
+  fig3_theme
+
+ggarrange(p_negcont,"", p_repl, common.legend = T, widths = c(1,0,1), legend = "right", nrow=1) %>%
+  ggsave(filename="../output/plot_panel_bradford.pdf", height=3, width=8.25)
+```
+
+```{r}
+## EMMs
+p_emm_negcont <- emm_bittersnp_x_gluFast %>% as.data.frame() %>%
+  mutate(model="Diet") %>% filter(fast=="0to2hr") %>%
+  mutate(Genotypes = factor(level, levels=c("0_0","0_1", "1_1"), labels=c("00", "01", "11")), .before=outcome) %>%
+  mutate(SNP = factor(gsub(".cat", "", exposure), levels=bitter_snps)) %>%
+  mutate(Gene_taste = c(rep("TAS2R38-PROP/PTC", 9), rep("TAS2R19-Quinine",3), rep("TAS2R14-Caffeine",3) )) %>%
+  mutate(Gene = gsub("-.*", "", Gene_taste)) %>%
+  mutate(color = paste0(Gene, " (", Genotypes, ")")) %>%
+  ggplot(aes(y=emmean-88.25, x=SNP, ymin=lowCI-88.25, ymax=upCI-88.25, color=color)) + 
+  scale_y_continuous(limits=c(-0.5,2), breaks=seq(-0.5,2,0.5), labels = seq(-0.5,2,0.5)+88) +
+  geom_point(position=position_dodge(0.55), size=2) + 
+  geom_errorbar(position=position_dodge(0.55), linewidth=0.5, width=0.25) + 
+  scale_color_manual(values=c(palettes$alleles_browns, palettes$alleles_yellows, palettes$alleles_greyblue), name="Genotype") + 
+  ylab("Blood glucose (mg/dL)") + xlab("") +
+  theme_bw() +
+  theme(panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        axis.text = element_text(color="black"),
+        legend.key.size = unit(0.45, "cm"),
+        legend.text = element_text(color="black", size=8))
+
+p_emm_negcont %>% ggsave(filename="../output/plot_panel_emm_bradford.pdf", height=2.5, width=8)
 
 ```
 
 
+## Combined specificity and replication results
 #### Take-aways
 
 For Plausible kcal:
@@ -375,7 +453,6 @@ Education
 * Significant diplotype x education interaction (in some levels) in all models
 * In models with interaction term, diplotype remains a significant predictor
 * Interactions: College vs none of the above
-
 
 
 

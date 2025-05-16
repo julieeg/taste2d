@@ -60,6 +60,14 @@ ac_labs <- c("Barts"=11012, "Birmingham" = 11021, "Bristol" =	11011, "Bury" =	11
              "Reading (imaging)"=11026, "Newcastle (imaging)" =11027, "Bristol (imaging)"=11028)
 
 
+### Additional smoking variable --------------
+
+addn_smoke_id <- fread("/humgen/florezlab/UKBB_app27892/UKBB_app27892_download_BEFORE_aug_2022/ukb45575.tab.gz", 
+                       data.table=FALSE, stringsAsFactors=FALSE) %>%
+  select(id=f.eid,
+         cigarettes_per_day = f.6183.0.0)
+
+
 ### Education level ---------------------------------------------------
 
 ## Coding based on: Ge T., et al. Cerebral Cortex 2019;29(8): 3471-3481.
@@ -89,36 +97,56 @@ educ_id <- fread("/humgen/florezlab/UKBB_app27892/UKBB_app27892_download_may_202
 
 
 
+
 ### Alcohol intake frequency -------------------------------------------
 
 alch_freq_labs <- list("Prefer not to answer" = -3, "Daily or almost daily" = 1, 
-  "3-4 per week" = 2, "1-2 per week" = 3, "1-3 per month" = 4, "Special occasions only" = 5, 
-  "Never" = 6) 
-
+                       "3-4 per week" = 2, "1-2 per week" = 3, "1-3 per month" = 4, "Special occasions only" = 5, "Never" = 6) 
 alch_num <- c("1" = 1, "2" = 2, "3" = 3, "4" = 4, "5" = 5, "6" = 6, "-9" = -3)
+drinker_status_labs <- c("Never" = 0, "Previous" = 1, "Current" = 2)
 
 
-alch_freq_id <- fread("/humgen/florezlab/UKBB_app27892/UKBB_app27892_download_aug_2022/ukb669173.tab.gz",
-                      data.table=FALSE, stringsAsFactors = FALSE) %>%
+## updated: 09-24-2024
+alch_id <- fread("/humgen/florezlab/UKBB_app27892/UKBB_app27892_download_aug_2022/ukb669173.tab.gz",
+                 data.table=FALSE, stringsAsFactors = FALSE) %>%
   select(id = f.eid,
-         alch_freq = f.1558.0.0) %>%
+         alch_freq = f.1558.0.0,
+         alch_drinker_status = f.20117.0.0,
+         alch_redwine_wk = f.1568.0.0,
+         alch_wht_chm_wk = f.1578.0.0,
+         alch_beer_wk = f.1588.0.0,
+         alch_spirit_wk = f.1598.0.0,
+         alch_fortwin_wk = f.1608.0.0,
+         alch_othr_wk = f.5364.0.0) %>%
+  
+  mutate_at("alch_drinker_status", ~ifelse(is.na(.) | . == -3, NA, .)) %>%
+  mutate(alch_drinker_status.lab = descr_label.fun(., "alch_drinker_status", drinker_status_labs)) %>%
+  
+  mutate(across(ends_with("_wk"), ~ifelse(is.na(.)==T | . %in% c(-1,-3), 0, .))) %>%
+  mutate(alch_currdrinker = ifelse(is.na(alch_drinker_status) | alch_drinker_status == -3, NA, 
+                                   ifelse(alch_drinker_status==2, 1, 0) )) %>%
+  mutate(alch_neverdrinker = ifelse(!is.na(alch_drinker_status) & alch_drinker_status == 0, 1, 0)) %>%
+  mutate(tot_alch_gm_wk_uk = alch_redwine_wk*16.8 + alch_wht_chm_wk*16.8 + alch_beer_wk*16 + 
+           alch_spirit_wk*8 + alch_fortwin_wk*14.08 + alch_othr_wk*12) %>%
+  mutate(tot_alch_drinks_per_week = tot_alch_gm_wk_uk / 14 ) %>%
   mutate(alch_freq.lab = descr_label.fun(., "alch_freq", alch_freq_labs),
-         alch_freq.num = descr_label.fun(., "alch_freq", alch_num))
+         alch_freq.num = descr_label.fun(., "alch_freq", alch_num)) %>%
+  select(id, alch_freq.num, alch_freq.lab, alch_drinker_status, tot_alch_drinks_per_week, tot_alch_gm_wk_uk)
 
 
 
+  
 ### Physical Activity -------------------------------------------
 
 pa_fields <- c("walking_dur", "walking_frq", "moderate_dur", "moderate_frq",
   "vigorous_dur", "vigorous_frq")
 
-pa_vars <- c("pa_met_excess", "pa_met_excess_lvl")
-
+pa_vars <- c("physact_met_excess", "physact_level")
 
 pa_id <- fread("/humgen/florezlab/UKBB_app27892/UKBB_app27892_download_aug_2022/ukb671173.tab.gz", 
       data.table=FALSE, stringsAsFactors=FALSE) %>% select(
-    id = f.eid,
-    iqpa_met = f.22040.0.0,
+        id = f.eid,
+        iqpa_met = f.22040.0.0,
     
     # activity duration (mins) & frequency (days/week) 
     walking_dur = f.874.0.0, walking_frq = f.864.0.0, #duration of walks (min) & days/week of walks + 10 min
@@ -128,30 +156,34 @@ pa_id <- fread("/humgen/florezlab/UKBB_app27892/UKBB_app27892_download_aug_2022/
     ) %>%  
 
   # if walking_frq = -2 (Unable to walk) --> Recode to 0
-  mutate_at("walking_frq", ~ifelse(walking_frq == -2, 0, walking_frq)) %>%
+  mutate_at("walking_frq", ~ifelse(. == -2, 0, .)) %>%
   
-  # replace Do not know (-3), Prefer not to answer (-3) or missing (NA) with median
-  mutate(across(pa_fields, ~ median_imp.fun(.))) %>%
+  # if activity duration <10 min/day --> Recode to 0
+  mutate(across(ends_with("dur"), ~ifelse(.<10,0,.))) %>%
   
-  # convert duration from min to hr
-  mutate(across(c(walking_dur, moderate_dur, vigorous_dur), ~ . /60)) %>% 
-
-  # calculate excess met, per activity type
-  mutate(met_excess_walk = (walking_dur * walking_frq * 2.3),
-         met_excess_mod = (moderate_dur * moderate_frq * 3.0),
-         met_excess_vig = (vigorous_dur * vigorous_frq * 7.0)) %>%
+  # replace Do not know (-1), Prefer not to answer (-3) or missing (NA) with median
+  mutate(across(ends_with("dur") | ends_with("frq") , ~ ifelse(.<0 | is.na(.)==T, 0, .))) %>%
+  
+  # multiply minutes per day per activity by excess MET score, per activity type
+  mutate(met_excess_walk = ((walking_dur * 2.3)/60)*walking_frq,
+         met_excess_mod = ((moderate_dur * 3.0)/60)*moderate_frq,
+         met_excess_vig = ((vigorous_dur * 7.0)/60)*vigorous_frq) %>%
   
   # calculate excess met-hr/wk
-  mutate(pa_met_excess = met_excess_walk + met_excess_mod + met_excess_vig) %>% 
-  
-  # create variable for physical activity LEVEL
-  mutate(
-    pa_met_excess_lvl = ifelse(
-      pa_met_excess < 10, "Low", ifelse(
-        pa_met_excess > 10 & pa_met_excess < 49.8, "Moderate", ifelse(
-          pa_met_excess >= 50, "High", NA)))
-        ) %>% 
-  select(id, all_of(pa_vars))
+  mutate(physact_met_excess = met_excess_walk + met_excess_mod + met_excess_vig) %>%
+  mutate(physact_met_excess = winsorize(physact_met_excess))
+
+physact_met_excess_lvls <- quantile(pa_id$physact_met_excess, probs=seq(0,1,0.33), include.lowest=F)[-1]
+
+pa_id <- pa_id %>% mutate(
+  physact_level = case_when(
+    physact_met_excess < physact_met_excess_lvls[1] ~ "1",
+    physact_met_excess >= physact_met_excess_lvls[1] & 
+      physact_met_excess < physact_met_excess_lvls[2] ~ "2",
+    physact_met_excess >= physact_met_excess_lvls[2] ~ "3")
+) %>%
+  mutate(physact_level.lab = factor(physact_level, levels=c("1", "2", "3"), labels=c("Low", "Moderate", "High"))) %>%
+  select(id, physact_met_excess, physact_level, physact_level.lab, iqpa_met)
 
 
 
@@ -186,7 +218,8 @@ phenos_id <- base_phenos_id %>%
   full_join(educ_id, by = "id") %>%
   full_join(alch_freq_id, by = "id") %>%
   full_join(pa_id, by = "id") %>%
-  full_join(income_id, by = "id")
+  full_join(income_id, by = "id") %>%
+  full_join(addn_smoke_id, by = "id")
   
 
 print(paste0("DONE: Basic phenotypes prepared for", nrow(base_phenos_id), " participants"))

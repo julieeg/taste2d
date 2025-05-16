@@ -16,12 +16,13 @@ source("../scripts/pantry/pantry.R", echo=F)
 
 # system arguments
 args = commandArgs(trailingOnly=TRUE)
-ANC = args[1]
+ANC = "EUR" #args[1]
+
+tag = "v7"
 
 # load phenotype data
 phenos <- fread(paste0("../data/processed/ukb_phenos_unrelated_", ANC, ".csv"))
 paste("Procecssing data for", ANC, "subset of N =", nrow(phenos), "unrelated participants")
-
 
 
 ###########################
@@ -33,9 +34,9 @@ gPC_vars <- c(paste0("gPC", 1:10))
 
 
 ## basic phenotypes  ---------------
-pheno_vars <- c("unrelated", "ancestry", "t2d_case.f", "t2d_med_any", "med_mets", "fasting_hrs",
+pheno_vars <- c("unrelated", "ancestry", "t2d_case.f", "t2d_med_any", "med_mets", "med_code", "fasting_hrs",
                 "ac", "ac_date", "age", "sex", gPC_vars, "smoke.lab", "alch_freq.lab", "ALC", 
-                "pa_met_excess_lvl", "pa_met_excess", "income", "educ_level.lab", "educ_isced.lab", "educ_years",
+                "physact_level", "physact_met_excess", "income", "educ_level.lab", "educ_isced.lab", "educ_years",
                 "glu", "hba1c_max", "bmi", "sbp", "dbp", "crp", "chol", "tg", "ldl" , "hdl")
 
 
@@ -182,7 +183,10 @@ select("id", all_of(pheno_vars), all_of(gPC_vars), all_of(nutrient_vars), all_of
                           sex == "Female" & TCALS >= 600 & TCALS <= 4300, TCALS, NA),
     fasting_hrs_lt24 = ifelse(fasting_hrs <= 24, fasting_hrs, NA)) %>%
   mutate(
-    income_level.lab = factor(income_level.lab, 
+    income_level.lab = factor(income_level.lab, levels = c("Less than 18,000", "18,000 to 30,999",
+                                                           "31,000 to 51,999", "52,000 to 100,000",  
+                                                           "Greater than 100,000")),
+    income_level = factor(income_level.lab, 
                               levels = c("Less than 18,000", "18,000 to 30,999",
                                          "31,000 to 51,999", "52,000 to 100,000",  
                                          "Greater than 100,000"),
@@ -198,12 +202,13 @@ select("id", all_of(pheno_vars), all_of(gPC_vars), all_of(nutrient_vars), all_of
                                        "O/GCSE levels or equivalent", # HS + Associates degree ~10yrs
                                        "CSEs or equivalent", # completed HS ~10yrs
                                        "None of the above")), #~7yrs
+    educ_isced.lab = factor(educ_isced.lab, levels=c(paste0("Level ", 1:5))),
     smoke_level.lab = factor(smoke_level.lab, levels = c("Never", "Previous", "Current")),
     alch_freq.lab = factor(alch_freq.lab, ordered = T,
                            levels = c("Daily or almost daily",
                                       "3-4 per week", "1-2 per week", "1-3 per month",
                                       "Special occasions only", "Never")),
-    physact_level = factor(pa_met_excess_lvl, ordered = T,
+    physact_level = factor(physact_level, ordered = T,
                                levels = c("Low", "Moderate", "High")),
     tg_log = log(tg),
     hba1c=hba1c_max,
@@ -222,10 +227,15 @@ select("id", all_of(pheno_vars), all_of(gPC_vars), all_of(nutrient_vars), all_of
     alch_heavydrinker = as.factor(ifelse(alch_freq.lab == "Daily or almost daily" | alch_freq.lab == "3-4 per week", 1, 0)),
     alch_lightdrinker = as.factor(ifelse(alch_freq.lab == "Special occasions only" | alch_freq.lab == "Never", 1, 0))
     ) %>%
+  #mutate(ALC_drinkers = ifelse(alch_freq.lab == "Never", NA, ALC)) %>%
   mutate(
     N_complete_kcal = ifelse(is.na(TCALS)==T, "Missing", "Complete"),
     plausible_kcal.f = ifelse(is.na(kcal_plaus)==F, "Plausible", "Implausible_Missing")
-  )
+  ) %>%
+  
+  #add variable for 2-hr glucoster
+  mutate(glu2hr=ifelse(fast_cat=="0to2hr",glu,NA))
+
 
 
 # Build diet PCs for diet patterns -------------
@@ -328,11 +338,81 @@ phenos_processed_id <- phenos_processed_id %>%
 
 
 # ===============================================
+## Additional covariates for adjustment 
+# ===============================================
+
+#phenos_processed_id %>% saveRDS("../data/processed/ukb_postprocessed_EUR.rda")
+
+## Added on 09-24-2024 ----------------------
+add_conf_id <- readRDS("../data/processed/ukb_conf_addn_09242024.rda")
+
+## Re-arranged on 12-27 to add new covariate vars to postprocessed data
+phenos_processed_id <- phenos_processed_id %>% 
+  left_join(add_conf_id %>% select(-alch_freq.lab), by = "id") %>% 
+  select(-physact_level.x, -pa_met_excess, -pa_met_excess_lvl) %>% rename(physact_level=physact_level.y) %>%
+  mutate(meds_bp = ifelse(sex == "Female" & meds_female.lab == "Blood pressure" | 
+                            sex == "Male" & meds_male.lab == "Blood pressure", 1, 
+                          ifelse(sex == "Female" & !is.na(meds_female.lab) | 
+                                   sex == "Male" & !is.na(meds_male.lab), 0, NA))) %>%
+  # Add Medication-adjusted BP
+  mutate(
+    sbp_adj = ifelse(meds_bp == 1, sbp+15, sbp),
+    dbp_adj = ifelse(meds_bp == 1, dbp+10, dbp)
+  ) %>%
+  mutate(glu2hr=ifelse(fast_cat=="0to2hr",glu,NA)) %>%
+  
+  # Add continuous confounders (.num)
+  mutate(
+    smoke_level.num=as.integer(descr_label.fun(., "smoke_level.lab", c("0"="Never", "1"="Former", "2"="Current"))),
+    alch_freq.num=as.integer(alch_freq.lab),
+    physact_level.num=as.integer(physact_level),
+    income_level.num=as.integer(descr_label.fun(., "income_level.lab", 
+                                                c("1"="lt_18000", "2"="from_18000_to_30999", "3"="from_31000_to_51999",
+                                                  "4"="from_52000_to_100000", "5"="gt_100000"))),
+    educ_isced.num=as.integer(descr_label.fun(., "educ_isced.lab", c("1"="Level 1", "2" = "Level 2", "3" = "Level 3", 
+                                                                     "4" = "Level 4", "5" = "Level 5")))
+  )
+
+## Add Assessment Center ----------------------------------------------------------
+ac_labs <- list("Barts"=11012, "Birmingham" = 11021, "Bristol" =	11011, "Bury" =	11008, 
+                "Cardiff" =	11003, "Cheadle (revisit)" =	11024, "Croydon" =	11020, 
+                "Edinburgh" =	11005, "Glasgow" = 11004, "Hounslow" = 11018, "Leeds" = 11010,
+                "Liverpool"=11016, "Manchester"=11001, "Middlesborough"=11017, "Newcastle" =11009, 
+                "Nottingham"=11013, "Oxford"=11002, "Reading"=11007, "Sheffield"=11014, "Stockport (pilot)"=10003,
+                "Stoke"=11006, "Swansea"=	11022,"Wrexham" =11023, "Cheadle (imaging)"=11025,
+                "Reading (imaging)"=11026, "Newcastle (imaging)" =11027, "Bristol (imaging)"=11028)
+
+phenos_processed_id <- phenos_processed_id %>% mutate(ac.f = descr_label.fun(., "ac", ac_labs))
+
+## Add glucose in mg/dL
+phenos_processed_id <- phenos_processed_id %>% mutate(
+  glu_mgdl = glu*18.018,
+  glu2hr_mgdl = glu2hr*18.018
+  )
+
+# ===============================================
 ## Compile & save ukb_analysis_ANC.rda
 # ===============================================
 
+#save postprocessed data as .rda
 phenos_processed_id %>% 
-  saveRDS(paste0("../data/processed/ukb_analysis_", ANC, ".rda"))
+  saveRDS(paste0("../data/processed/ukb_postprocessed_EUR_20241227.rda"))
+
+
+## v6 --> filtered to EXCLUDE glucose outliers
+analysis <- phenos_processed_id %>%
+  filter(n_geno==1 & n_t2d_contrl==1 & n_complete==1 & n_fast_24hr==1) %>%
+  filter(find_outliers.fun(glu)==0)
+
+## v7 --> apply winsorizing function over all continuous variables (to maximize sample & for consistency)
+#analysis <- phenos_processed_id %>%
+#  filter(n_geno==1 & n_t2d_contrl==1 & n_complete==1 & n_fast_24hr==1) %>%
+#  mutate_if(is.numeric, winsorize)
+
+#save as .rda
+analysis %>% 
+  saveRDS(paste0("../data/processed/ukb_analysis_", tag, "_", ANC, ".rda"))
+
 
 cat("Done compiling ukb_analysis_ANC.rda dataset!")
 

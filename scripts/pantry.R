@@ -13,8 +13,6 @@ library(tidyverse) ; library(table1)
 ## Diet variables
 # ===================================
 
-dietVars <- c("TCALS", "CHO_pct", "FIBER", "CHO2FIB", "FAT_pct", "PRO_pct", "ALC", paste0("dietPC", 1:10))
-
 diet_labels <- c(
   raw_veg_QT="Raw vegetables",
   cooked_veg_QT="Cooked vegetables",
@@ -60,7 +58,7 @@ diet_labels_descriptive <- c(
   milk_type_full_vs_low_or_nonfat_BIN="Prefer full>low/no-fat milk",
   cereal_type_sugar_vs_any_bran_BIN="Prefer sugary>bran cereal",
   coffee_type_decaf_vs_regular_BIN="Prefer decaf>caffeinated coffee",
-  cereal_intake_QT="Cerealintake",
+  cereal_intake_QT="Cereal intake",
   spread_type_butter_vs_any_other_BIN="Prefer butter>other spreads",
   coffee_QT="Coffee intake",
   tea_QT="Tea intake",
@@ -114,6 +112,13 @@ median_25to75<-function(x, d=2) {
           qs[[2]], qs[[4]])
 }
 
+
+# ======================================================
+## Print P-values as rounded or scientific (if <0.01)
+# ======================================================
+format_p.fun <- function(p, digits=3) {
+  ifelse(p<0.01, format(p, scientific=T, digits=2), round(p, digits))
+}
 
 
 ################################################
@@ -242,79 +247,106 @@ source("../scripts/pantry/print_summary_table_fun.R", echo=F)
 # ==============================================
 ## Function to get estimated marginal means
 # ==============================================
-get_emm.fun <- function(exposure, outcome, covars, reference, data=analysis) {
-  exp.dat <- data %>% select(exp=exposure)
+get_emm.fun <- function(exposure, outcome, covars, reference, label=F, label.outcome=F, data=analysis) {
+  exp.dat <- data %>% dplyr::select(exp=exposure)
   dat <- data %>% mutate(exp=exp.dat$exp) ; dat$exp <- relevel(as.factor(dat$exp), ref=reference)
   mod <- lm(formula(paste0(outcome, "~", "exp", "+", covars)), dat)
-  emm <- as.data.frame(emmeans(mod, ~ exp, rg.limit=152000)) %>% mutate(outcome=outcome, .after=exp) %>% 
+  emm <- as.data.frame(emmeans(mod, ~ exp, rg.limit=880000)) %>% mutate(outcome=outcome, .after=exp) %>% 
     mutate(n = as.vector(table(mod$model$exp)), .before=emmean)
-  anv.p <- anova(mod) #$'Pr(>F)'[1]
-  return(list(emm=as.data.frame(emm), anv.p=anv.p))
+  anv <- anova(mod) #$'Pr(>F)'[1]
+  
+  out<-matrix(NA, nrow(emm), 10, dimnames = list(NULL, c("outcome", "model", "exposure", "level", "n", "emmean", "SE", "df", "lowCI", "upCI")))
+  out[,1]=rep(ifelse(label.outcome==F,outcome,label.outcome),nrow(out))
+  out[,2]<-rep(ifelse(label==F,NA,label),nrow(out)) ; out[,3]<-rep(exposure,nrow(out))
+  out[,4:10]<-as.matrix(emm[,c(1,3:8)]) ; out <- as.data.frame(out) %>% mutate(anv.p=anv[1,5])
+  
+  return(list(emm=as.data.frame(out), anv=anv))
 }
 
 
 # =================
 ## summarize lm
 # =================
-print_lm <- function(exposure="taste_diplos", outcome="glu", covariates=m, label, data=analysis, 
-                     round=F, digits=c(3,6), lm_trend=F) {
+print_lm <- function(exposure="taste_diplos", outcome="glu", covariates=m, label, 
+                     label.outcome=F, round=F, digits=c(3,3), lm_trend=T, data=analysis) {
   
   mod <- lm(formula(paste0(outcome, "~", exposure, "+", covariates)), data)
-  if(label==F) {label <- outcome}
+  if(label==F) {lab <- outcome} else {lab <- label}
+  if(label.outcome==F) {lab.outcome <- outcome} else{lab.outcome <- label.outcome}
   
   # For categorical exposure variable 
   if(is.numeric(data[[exposure]]) == F) {
     nX <- length(mod$xlevels[[exposure]])
-    out<-matrix(NA, nX, 6, dimnames = list(paste0(label, "_", mod$xlevels[[exposure]]), c("n", "beta", "se", "p", "f", "f_p")))
-    out[2:nrow(out),c(2:4)] <- summary(mod)$coef[2:nX, c(1:2,4)] ; out[1,5:6] <-c(anova(mod)[1,4], anova(mod)[1,5])
-    out[,1] <- as.vector(table(mod$model[[exposure]]))
+    out<-matrix(NA, nX, 9, dimnames = list(NULL, c("outcome", "model", "exposure", "n", "beta", "se", "p", "f", "f_p")))
+    out[,1] <- rep(lab.outcome, nrow(out)) ; out[,2] <- rep(lab, nrow(out)) ; out[,3] <- mod$xlevels[[exposure]]
+    out[2:nrow(out),c(5:7)] <- summary(mod)$coef[2:nX, c(1:2,4)] ; out[1,8:9] <-c(anova(mod)[1,4], anova(mod)[1,5])
+    out[,4] <- as.vector(table(mod$model[[exposure]]))
     # If lm_trend should be printed
     if(lm_trend == T) {
       exposure_num <- as.numeric(data[[exposure]])
-      data <- data %>% mutate(exposure.num=exposure_num)
+      data <- data %>% dplyr::mutate(exposure.num=exposure_num)
       lm.trend <- as.vector(summary(lm(formula(paste0(outcome, "~exposure.num+", covariates)), data))$coef[2,])
       out <- as.data.frame(out) %>% mutate(trend_p=c(lm.trend[4], rep(" ", nX-1) )) } 
   } 
   
   # For continuous exposure variable
   if(is.numeric(data[[exposure]]) == T) {
-    out<-matrix(NA, 1, 5, dimnames = list(exposure, c("n", "Model", "beta", "se", "p")))
-    out[3:5] <- summary(mod)$coef[2,c(1:2,4)]
-    out[,1] <-length(mod$fitted.values) ; out[,2] <- NA ; out[,2] <- label
+    out<-matrix(NA, 1, 7, dimnames = list(NULL, c("outcome", "model", "exposure", "n",  "beta", "se", "p")))
+    out[5:7] <- summary(mod)$coef[2,c(1:2,4)]
+    out[,4] <-length(mod$fitted.values) ; out[,c(1:3)] <- c(lab.outcome, lab, exposure) 
     out <- as.data.frame(out) %>% mutate(across(c("beta", "se", "p"), ~as.numeric(.)))
-    } 
+  }
+  
+  # Convert values to numeric
+  out <- as.data.frame(out) %>% mutate(across(c("beta", "se"), ~as.numeric(.)))
   
   # If values should be rounded
   if(round == T) {
     out <- data.frame(out) %>%
-      mutate(across(c("beta", "se"), ~round(as.numeric(.), digits[1]))) %>%
+      dplyr::mutate(across(c("beta", "se"), ~round(as.numeric(.), digits[1]))) %>%
       mutate_at("p", ~round(as.numeric(.), digits[2]) ) 
   }
-  
   return(as.data.frame(out))
 }
 
 
-print_glm <- function(exposure="taste_diplos", outcome, covariates=m, label, data=analysis) {
+print_glm <- function(exposure="taste_diplos", outcome, covariates=m, print_trend=F, label=F, data=analysis, exp=T) {
   
   mod <- glm(formula(paste0(outcome, "~", exposure, "+", covariates)), family=binomial("logit"), data) 
+  mod.anv <- anova(mod)
   
   # For categorical exposure variable 
   if(is.numeric(data[, ..exposure][[1]]) == F) {
     nX <- length(mod$xlevels[[exposure]])
     out<-matrix(NA, nX, 6, dimnames = list(paste0(label, "_", mod$xlevels[[exposure]]), c("n", "beta", "se", "p", "f", "f_p")))
-    out[2:nrow(out),c(2:4)] <- summary(mod)$coef[2:nX, c(1:2,4)] ; out[1,5:6] <-c(anova(mod)[1,4], anova(mod)[1,5])
+    out[2:nrow(out),c(2:4)] <- summary(mod)$coef[2:nX, c(1:2,4)] ; out[1,5] <- mod.anv[exposure,4] ; out[1,6] <- mod.anv[exposure,5]
     out[,1] <- as.vector(table(mod$model[[exposure]])) 
-  }
+    if(print_trend == T) {
+      exposure_num <- as.numeric(data[[exposure]])
+      data <- data %>% dplyr::mutate(exposure.num=exposure_num)
+      glm.trend <- as.vector(summary(glm(formula(paste0(outcome, "~exposure.num+", covariates)), family=binomial("logit"), data))$coef[2,])
+      out <- as.data.frame(out) %>% mutate(trend_p=c(glm.trend[4], rep(" ", nX-1) )) } 
+  } 
   
   # For continuous exposure variable
   if(is.numeric(data[, ..exposure][[1]]) == T) {
-    out<-matrix(NA, 1, 5, dimnames = list(exposure, c("n", "Model", "beta", "se", "p")))
-    out[3:5] <- summary(mod)$coef[2,c(1:2,4)]
-    out[,1] <-length(mod$fitted.values) ; out[,2] <- NA ; out[,2] <- label
+    out<-matrix(NA, 1, 6, dimnames = list(exposure, c("n", "beta", "se", "p", "f", "f_p")))
+    out[2:4] <- summary(mod)$coef[2,c(1:2,4)]
+    out[,1] <- length(mod$fitted.values) ; out[, 5] <- mod.anv[exposure, 4] ; out[, 6] <- mod.anv[exposure, 5]
     out <- as.data.frame(out) %>% mutate(across(c("beta", "se", "p"), ~as.numeric(.)))
   }
   
+  #Exponentiate, if exp=T
+  if(exp == T) {
+    out <- out %>% as.data.frame() %>% mutate(or=ifelse(!is.na(beta), exp(beta), beta)) %>%
+      mutate(or.lci = ifelse(!is.na(se), exp(beta-1.96*se), se),
+             or.uci = ifelse(!is.na(se), exp(beta+1.96*se), se)) %>%
+      select(n, or, or.lci, or.uci, p, f, ends_with("_p")) 
+  }
+  
+  #Add model label 
+  if(label != F) {out <- out %>% mutate(label=label, .before=n)}
+  out <- out %>% mutate(exposure = gsub(".*[_]", "", rownames(.)), outcome=outcome, .after="label")
   return(as.data.frame(out))
   
 }
@@ -342,20 +374,20 @@ print_lm_interaction <- function(exposure="taste_diplos", interaction, outcome="
     
     out <- rbind(c(rep(NA, 4), mod.anova[(nrow(mod.anova)-1),4], mod.anova[(nrow(mod.anova)-1),5]), out)
     rownames(out)[1] <- label_interaction
-   
-     # If lm_trend should be printed
+    
+    # If lm_trend should be printed
     #if(lm_trend == T) {
-     # exposure_num <- as.numeric(data[, ..exposure][[1]])
-     # data <- data %>% mutate(exposure.num=exposure_num)
-     # lm.trend <- as.vector(summary(lm(formula(paste0(outcome, "~exposure.num+", covariates)), data))$coef[2,])
+    # exposure_num <- as.numeric(data[, ..exposure][[1]])
+    # data <- data %>% mutate(exposure.num=exposure_num)
+    # lm.trend <- as.vector(summary(lm(formula(paste0(outcome, "~exposure.num+", covariates)), data))$coef[2,])
     # out <- as.data.frame(out) %>% mutate(t_p=c(lm.trend[4], rep(" ", nX-1) )) } 
   } ; 
-
+  
   # If values should be rouded
   if(round == T) {
     out <- data.frame(out) %>%
-      mutate(across(c("beta", "se"), ~round(as.numeric(.), digits[1]))) %>%
-      mutate_at("p", ~round(as.numeric(.), digits[2]) ) 
+      dplyr::mutate(across(c("beta", "se"), ~round(as.numeric(.), digits[1]))) %>%
+      dplyr::mutate_at("p", ~round(as.numeric(.), digits[2]) ) 
   }
   
   return(as.data.frame(out))
@@ -366,33 +398,36 @@ print_lm_interaction <- function(exposure="taste_diplos", interaction, outcome="
 ## Make print_lm tables "pretty"
 # ===================================
 
-make_pretty_lm <- function(lm_table, digits=c(3,6), show_SE=F) {
+make_pretty_lm <- function(lm_table, digits=c(3,3),show_SE=F, scientific_P=T) {
   
   # Set parameters
   d_est<-digits[1];d_pval<-digits[2]
-  if("exposure" %in% names(lm_table)) {exp <- lm_table$exposure} else {exp <-gsub(".*[_]", "", rownames(lm_table))}
-  if("model" %in% names(lm_table)) {mod <- lm_table$model} else {mod <-gsub("[_].*", "", rownames(lm_table))}
-  if("X" %in% names(lm_table)) {mod <- lm_table$X} else {mod <-gsub("[_].*", "", rownames(lm_table))}
-  
   se<- as.numeric(lm_table$se)
+  
+  # Format P-value function
+  format_p.fun <- function(p) {
+    P<-ifelse(as.numeric(p) <0.001, format(as.numeric(p), scientific = T, digits=d_pval), 
+              round(as.numeric(p), d_pval))
+    return(P)
+  }
   
   #Rename P-values if only p detected
   pretty_table <- lm_table %>%
-    mutate(across(ends_with("_p"), ~as.numeric(., d_pval))) %>%
-    mutate(across(ends_with("_p"), ~round(., d_pval))) %>%
+    mutate(across(ends_with("_p"), ~format_p.fun(.))) %>%
     mutate(beta_se = sprintf("%s (%s, %s)", round(beta, d_est), round(beta-1.96*se, d_est), round(beta+1.96*se, d_est)))
   if("f" %in% names(pretty_table) & nrow(pretty_table) > 1) {
     pretty_table <- pretty_table %>% 
-      mutate(Exposure=exp, Model=mod) %>% 
-      mutate_at("p", ~round(as.numeric(.), d_pval)) %>%
+      rename(Outcome=outcome, Model=model, Exposure=exposure) %>% 
+      mutate_at("p", ~format_p.fun(.)) %>%
       rename(P_t.test=p) %>%
       rename_with(~paste0("P_", gsub("[_].*", "", .), ".test"), ends_with("_p"))
   } else {
     pretty_table <- pretty_table %>% 
-      mutate_at("p", ~round(as.numeric(.), d_pval)) %>%
-      rename(P_t.test=p) %>% mutate(Exposure=rownames(.), N=n)
+      mutate(Outcome=outcome, Model=model, Exposure=exposure) %>% 
+      mutate_at("p", ~format_p.fun(.)) %>%
+      rename(P_t.test=p) %>% mutate(N=n)
   } ; pretty_table <- pretty_table %>%
-    select(Model, Exposure, N=n, Beta_95CI=beta_se, starts_with("P")) %>%
+    dplyr::select(Outcome, Model, Exposure, N=n, Beta_95CI=beta_se, starts_with("P")) %>%
     mutate_all(~ifelse(is.na(.), "-", .)) %>%
     mutate_at("Beta_95CI", ~ifelse(. == "NA (NA, NA)", "-", .))
   
@@ -402,7 +437,48 @@ make_pretty_lm <- function(lm_table, digits=c(3,6), show_SE=F) {
   
   return(pretty_table)
 }
+
+
+make_pretty_glm <- function(glm_table, digits=c(3,3), show_SE=F, scientific_P=T) {
   
+  # Set parameters
+  d_est<-digits[1];d_pval<-digits[2]
+  se<-as.numeric(glm_table$se)
+  
+  # Format P-value function
+  format_p.fun <- function(p) {
+    P<-ifelse(as.numeric(p) <0.001, format(as.numeric(p), scientific = T, digits=d_pval), 
+              round(as.numeric(p), d_pval))
+    return(P)
+  }
+  
+  #Rename P-values if only p detected
+  pretty_table <- glm_table %>%
+    mutate(across(ends_with("_p"), ~format_p.fun(.))) %>%
+    mutate(or_se = sprintf("%s (%s, %s)", round(or, d_est), round(or.lci, d_est), round(or.uci, d_est)))
+  if("f" %in% names(pretty_table) & nrow(pretty_table) > 1) {
+    pretty_table <- pretty_table %>% 
+      #rename(Outcome=outcome, Model=model, Exposure=exposure) %>% 
+      mutate_at("p", ~format_p.fun(.)) %>%
+      rename(P_pairwise.test=p) %>%
+      rename_with(~paste0("P_", gsub("[_].*", "", .), ".test"), ends_with("_p"))
+  } else {
+    pretty_table <- pretty_table %>% 
+      mutate(Outcome=outcome, Model=model, Exposure=exposure) %>% 
+      mutate_at("p", ~format_p.fun(.)) %>%
+      rename(P_pairwise=p) %>% mutate(N=n)
+  } ; pretty_table <- pretty_table %>%
+    select(#Outcome, Model, Exposure
+      Model=label, Exposure=exposure, N=n, OR_95CI=or_se, starts_with("P")) %>%
+    mutate_all(~ifelse(is.na(.), "-", .)) %>%
+    mutate_at("OR_95CI", ~ifelse(. == "NA (NA, NA)", "-", .))
+  
+  if(show_SE==T) { pretty_table <- pretty_table %>% mutate(SE=ifelse(is.na(se), "-", round(se, d_pval)), .after=Beta_95CI) } else{
+    pretty_table <- pretty_table
+  } ; rownames(pretty_table) <- NULL
+  
+  return(pretty_table)
+}
 
 
 ######################################
@@ -484,14 +560,34 @@ ggtheme_basic <- theme(
   axis.text = element_text(color="black", size=10), 
   axis.title.y = element_text(color="black", size=12, vjust=-0.5),
   axis.title.x = element_text(color="black", size=12, vjust=-0.5),
-        legend.position = "bottom", 
-        legend.box.background = element_rect(color = "black"),
-        legend.key.size = unit(0.5, 'line'),
-        legend.margin = margin(0.5,0.5,0.5,0.5, unit="pt"),
-        legend.text = element_text(size=8), 
-        legend.title = element_text(face="bold", size=8),
-        plot.title=element_text(size=10),
-        strip.text = element_text(face="bold", size=10))
+  legend.position = "bottom", 
+  legend.box.background = element_rect(color = "black"),
+  legend.key.size = unit(0.5, 'line'),
+  legend.margin = margin(0.5,0.5,0.5,0.5, unit="pt"),
+  legend.text = element_text(size=8), 
+  legend.title = element_text(face="bold", size=8),
+  plot.title=element_text(size=10),
+  strip.text = element_text(face="bold", size=10))
+
+
+ggtheme_basic_bw <- theme_bw() + theme(
+  axis.text = element_text(color="black", size=10), 
+  axis.title.y = element_text(color="black", size=9, face="bold"),
+  axis.text.y=element_text(size=7),
+  axis.text.x = element_blank(), axis.ticks.x=element_blank(),
+  axis.title.x = element_text(color="black", size=12, vjust=-0.5),
+  panel.grid.minor = element_blank(), 
+  panel.grid.major.x = element_blank(),
+  legend.position = "top", 
+  legend.box.background = element_rect(color = "black"),
+  legend.key.size = unit(0.5, 'line'),
+  legend.margin = margin(0.5,0.5,0.5,0.5, unit="pt"),
+  legend.text = element_text(size=8), 
+  legend.title = element_text(face="bold", size=8),
+  plot.title=element_text(size=10),
+  strip.background = element_blank(), 
+  strip.text = element_text(size=8, face="plain"))
+
 
 # set ggplot theme
 ggtheme_fancy <- theme_bw() + 
@@ -504,7 +600,7 @@ ggtheme_fancy <- theme_bw() +
         axis.title = element_text(color="black", size=10),
         legend.position = "right", 
         legend.box.background = element_rect(color = "black"),
-       # legend.key.size = unit(0.35, 'line'),
+        # legend.key.size = unit(0.35, 'line'),
         legend.key.size = unit(0.5, 'line'),
         legend.margin = margin(0.5,0.5,0.5,0.5, unit="pt"),
         legend.text = element_text(size=8), 
@@ -514,23 +610,21 @@ ggtheme_fancy <- theme_bw() +
   )
 
 ggtheme_figures <- theme(axis.text.x = element_text(color="black", size=8), 
-        axis.text.y = element_text(color="black", size=8),
-        axis.title = element_text(color="black", size=9),
-        panel.background = element_rect(color="#00000010"),
-        legend.position = "right", 
-        #legend.box.background = element_rect(color = "black"),
-        #legend.key.size = unit(0.5, 'line'),
-        legend.margin = margin(0.5,0.5,0.5,0.5, unit="pt"),
-        legend.text = element_text(size=8), 
-        legend.title = element_text(face="bold", size=8),
-        plot.title=element_text(size=8),
-        strip.text = element_text(face="bold", size=8)
-  )
-
-
+                         axis.text.y = element_text(color="black", size=8),
+                         axis.title = element_text(color="black", size=9),
+                         panel.background = element_rect(color="#00000010"),
+                         legend.position = "right", 
+                         #legend.box.background = element_rect(color = "black"),
+                         #legend.key.size = unit(0.5, 'line'),
+                         legend.margin = margin(0.5,0.5,0.5,0.5, unit="pt"),
+                         legend.text = element_text(size=8), 
+                         legend.title = element_text(face="bold", size=8),
+                         plot.title=element_text(size=8),
+                         strip.text = element_text(face="bold", size=8)
+)
 
 ggtheme_waterfall <- 
-  theme_bw() +
+  #theme_bw() +
   theme(panel.grid.major.x = element_blank(), 
         panel.grid.minor.x = element_blank(),
         axis.text = element_text(color="black"),
@@ -542,6 +636,13 @@ ggtheme_waterfall <-
         legend.key.size = unit(0.25,"cm"))
 
 
+ggtheme_emm <- theme(axis.title.y = element_text(size=11),
+                     axis.title.x = element_text(size=10, vjust=0.5),
+                     axis.text.y = element_text(size=11), axis.text.x = element_text(size=10),
+                     panel.background = element_rect(fill="#00000008"),
+                     panel.border = element_rect(color="black", fill=NA),
+                     legend.position = "right", legend.text = element_text(size=9),
+                     legend.title = element_text(face="bold", size=10))
 
 # =================================
 ## Build pre-set color palettes 
@@ -554,17 +655,17 @@ palettes <- list(NatComms= paletteer_d("ggsci::nrc_npg", n=10),
                  blues = rev(paletteer_dynamic("cartography::blue.pal", 10)),
                  purples=rev(paletteer_dynamic("cartography::purple.pal", 10))[3:10],
                  nature_main4=c("#888363","#C5C1A5", "#96A0B3", "#435269"),
+                 blured_bin = c("#5496CE", "#DC6464"),
                  
                  #Categorical/assigned 
-                 #nature_haplos_yrb=c("AVI"="#957628","PAV"="#8F2F24", "AAV"="grey50","PVI"="grey50"),
                  nature_haplos_dominant=c("AVI"="#C5C1A5", "AAV"="grey80", "PVI"="grey80", "PAV"="#96A0B3"),
-                 #nature_diplosAA_canonical_yrb=c("AVI/AVI"="#957628", "AVI/AAV"="grey50", "AVI/PAV"="#00488D", "PAV/PAV"="#8F2F24", "AAV/PAV"="grey50"),
-                 #nature_diplos_canonical=c("AVI/AVI"="#888363", "AVI/AAV"="grey80", "AVI/PAV"="#AEB1AC", "PAV/PAV"="#435269", "AAV/PAV"="grey80"),
                  nature_diplos_dominant=c("AVI/AVI"="#C5C1A5", "AVI/AAV"="grey80", "AVI/PAV"="#96A0B3", "PAV/PAV"="#435269", "AAV/PAV"="grey80"),
                  
                  # Diverging heatmaps
                  #hm_palette = colorRampPalette(c("#888363", "white", "#435269"))(n=100),
                  hm_palette_rwb = colorRampPalette(c("#00488D", "white", "#8F2F24"))(n=100),
+                 hm_palette_gwp = colorRampPalette(c("#A64791", "white", "#429130"), space="rgb")(n=100),
+                 hm_palette_gwp_custom = circlize::colorRamp2(c(-5, 0, 5), c("#A64791", "white", "#429130")),
                  hm_corr_blue = colorRampPalette(c("white", "#CAE5EF", "#96CED4", "#48BDBC", "#0096A0"))(n=100),
                  
                  #Binary codings
@@ -578,7 +679,7 @@ palettes <- list(NatComms= paletteer_d("ggsci::nrc_npg", n=10),
 
 
 
-#A5A083
+"#FEFDFD"
 
 # ============================================
 ## ggplot themes

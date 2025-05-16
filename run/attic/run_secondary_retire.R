@@ -189,6 +189,90 @@ do.call(rbind.data.frame, lapply(bitter_snps_cat, function(snp) {
 
 
 
+#######################################################
+##  Exploratory: Interactions of TAS2R3 x 24HR data  ## 
+#######################################################
+
+# ========================================================
+## Explore interactions of TAS2R38 x 24HR on Glu
+# ========================================================
+# - Diplotype * SES (income, education)
+# - Diplotype * sex
+# - Single & multiple interaction terms, in each model
+
+int.l <- c(Plausible_kcal="as.factor(incl_kcal)", Sex="sex", Income="income_level.lab", Educ= "educ_level.lab")
+
+## TAS2R38 diplotype x plaus_kcal on RG  ------------------------
+do.call(rbind, lapply(1:length(int.l), function(i) {
+  do.call(rbind, lapply(1:length(models.l), function(m){ 
+    mod <- lm(formula(paste0("glu~taste_diplos+", models.l[[m]], "+taste_diplos*", int.l[[i]])), data=analysis)
+    summary(mod)$coef %>% as.data.frame() %>%
+      filter(startsWith(rownames(.), "taste") ==T | startsWith(rownames(.), int.l[i]) == T) %>% 
+      mutate(model=names(models.l)[m],
+             interaction = rep(names(int.l)[i], nrow(.)),
+             term = rownames(.), .before="Estimate")
+  })) %>% 
+    rename(beta="Estimate", se=`Std. Error`, t_val=`t value`, p=`Pr(>|t|)`)
+})) %>% write.csv("../data/processed/analysis/int_diplo_x_rg.csv")
+
+
+## TAS2R38 diplotype x plaus_kcal on A1c ------------------------
+do.call(rbind, lapply(1:length(int.l), function(i) {
+  do.call(rbind, lapply(1:length(models.l), function(m){ 
+    summary(lm(formula(paste0("glu~taste_diplos.num+", models.l[[m]], "+taste_diplos.num*", int.l[[i]])), data=analysis))$coef %>% as.data.frame() %>%
+      filter(startsWith(rownames(.), "taste") ==T | startsWith(rownames(.), int.l[i]) == T) %>% 
+      mutate(model=names(models.l)[m],
+             interaction = rep(names(int.l)[i], nrow(.)),
+             term = rownames(.),
+             .before="Estimate")
+  })) %>% 
+    rename(beta="Estimate", se=`Std. Error`, t_val=`t value`, p=`Pr(>|t|)`)
+})) %>% write.csv("../data/processed/analysis/int_diplo_num_x_rg.csv")
+
+
+## TAS2R38 diplotype x plaus_kcal on Glu x fasting time  ------------------
+do.call(rbind.data.frame, lapply(fast_cat.l, function(fast) {
+  do.call(rbind, lapply(1:length(int.l), function(i) {
+    do.call(rbind.data.frame, lapply(1:length(models.nofast.l), function(m) {
+      summary(lm(formula(paste0("glu~taste_diplos+", models.nofast.l[[m]], "+taste_diplos*", int.l[[i]])), 
+                 data=analysis %>% filter(fast_cat == fast)))$coef %>% as.data.frame() %>%
+        filter(startsWith(rownames(.), "taste") ==T | startsWith(rownames(.), int.l[i]) == T) %>% 
+        mutate(model=names(models.l)[m],
+               interaction = rep(names(int.l)[i], nrow(.)),
+               term = rownames(.),
+               fast=rep(fast, nrow(.)), .before="Estimate") }))
+  })) %>%
+    rename(beta="Estimate", se=`Std. Error`, t_val=`t value`, p=`Pr(>|t|)`)
+})) %>% write.csv("../data/processed/analysis/int_diplo_x_rg_fasting.csv")
+
+
+# # TAS2R38 diplotype x plaus_kcal on A1c x fasting time ------------------
+do.call(rbind.data.frame, lapply(fast_cat.l, function(fast) {
+  do.call(rbind, lapply(1:length(int.l), function(i) {
+    do.call(rbind.data.frame, lapply(1:length(models.nofast.l), function(m) {
+      summary(lm(formula(paste0("glu~taste_diplos.num+", models.nofast.l[[m]], "+taste_diplos.num*", int.l[[i]])), 
+                 data=analysis %>% filter(fast_cat == fast)))$coef %>% as.data.frame() %>%
+        filter(startsWith(rownames(.), "taste") ==T | startsWith(rownames(.), int.l[i]) == T) %>% 
+        mutate(model=names(models.l)[m],
+               interaction = rep(names(int.l)[i], nrow(.)),
+               term = rownames(.),
+               fast=rep(fast, nrow(.)), .before="Estimate") }))
+  })) %>%
+    rename(beta="Estimate", se=`Std. Error`, t_val=`t value`, p=`Pr(>|t|)`)
+})) %>% write.csv("../data/processed/analysis/int_diplo_num_x_rg_fasting.csv")
+
+
+## TAS2R38 diplotype x plaus_kcal x [other covariates] on RG --------------
+do.call(rbind, lapply(2:length(int.l), function(i) {
+  do.call(rbind, lapply(1:length(models.l), function(m){ 
+    summary(lm(formula(paste0("glu~taste_diplos.num*incl_kcal+", models.l[[m]], "+taste_diplos.num*", int.l[[i]])), data=analysis))$coef %>% as.data.frame() %>%
+      filter(startsWith(rownames(.), "taste") ==T | startsWith(rownames(.), int.l[i]) == T | rownames(.) == "incl_kcal") %>% 
+      mutate(model=names(models.l)[m],
+             interaction = rep(names(int.l)[i], nrow(.)),
+             term = rownames(.), .before="Estimate") })) %>% 
+    rename(beta="Estimate", se=`Std. Error`, t_val=`t value`, p=`Pr(>|t|)`)
+})) %>% write.csv("../data/processed/analysis/int_kcalplus_diplo_num_x_rg.csv")
+
 
 ## END_OF_SCRIPT
 

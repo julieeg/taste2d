@@ -1,0 +1,96 @@
+---
+title: "asn_tastexcoffee_t2d"
+output: html_document
+date: "2025-01-15"
+---
+
+```{r setup, include=FALSE, echo=F}
+knitr::opts_chunk$set(echo = F, error = F, warning = F, fig.align="center", 
+                      out.width = "90%", out.height = "50%", fig.height=5)
+
+lapply(c("tidyverse", "data.table", "paletteer", "ggpubr", "emmeans", "ComplexHeatmap"),  library, character.only = TRUE)
+
+```
+
+## Overview
+
+This document summarises the preliminary anlaysis to explore an interaction between the TAS2R38 bitter taste receptor and coffee intake on T2D status, T2D risk factors (glucose) and longitudinal T2D risk. 
+
+
+```{r load_data}
+
+base <- readRDS("../data/processed/ukb_postprocessed_EUR_20241227.rda") 
+
+```
+
+```{r}
+btc <- base %>% 
+  filter(n_geno==1) %>%
+  select(age, sex, starts_with("gPC"), ancestry,
+         taste_diplos, rs713598_G, rs1726866_G, rs10246939_C,
+         bmi, physact_level.lab, smoke_level.lab, alch_freq.lab,
+         income_level.lab, educ_level.lab, cigarettes_per_day,
+         glu, glu2hr, t2d_case, t2d_med_any,
+         coffee_QT, tea_QT, energy=TCALS, carb_pct=CHO_pct, fat_pct=FAT_pct, prot_pct=PRO_pct, fiber=FIBER) 
+
+## Add categorical coffee intake variable
+btc <- btc %>% mutate(
+  coffee_cat5 = case_when(
+    coffee_QT == 0 ~ "0 cups/d",
+    coffee_QT > 0 & coffee_QT <= 1 ~ "1 cups/d",
+    coffee_QT == 2 ~ "2 cups/d",
+    coffee_QT == 3 ~ "3 cups/d",
+    coffee_QT == 4 ~ "4 cups/d",
+    coffee_QT >= 5 ~ "5+ cups/d" 
+    )) %>%
+  mutate(coffee_cat5 = factor(coffee_cat5, levels=c(paste(c(0:4, "5+"), "cups/d")))) %>%
+  mutate(coffee_cat4 = case_when(
+    coffee_QT == 0 ~ "0 cups/d",
+    coffee_QT > 0 & coffee_QT <= 1 ~ "<=1 cups/d",
+    coffee_QT %in% c(2,3) ~ "2-3 cups/d",
+    coffee_QT %in% c(4,5) ~ "4-5 cups/d",
+    coffee_QT >= 6 ~ "6+ cups/d"
+    )) %>%
+  mutate(coffee_cat4 = factor(coffee_cat4, levels=c(paste(c("0", "<=1", "2-3", "4-5", "6+"), "cups/d"))))
+  
+
+```
+
+## Descriptive analysis
+
+Participant inclusion criteria
+* TAS2R38 status (per PAV haplotype)
+* available coffee intake data
+* available covariate data (age, sex, gPCs, smoking status, physical activity, alcohol use, tea intake)
+* EUR genetic ancestry 
+* t2d data available
+
+```{r pressure, echo=FALSE}
+
+taste_diplotypes = c("AVI/AVI", "AVI/PAV", "PAV/PAV")
+descr_vars = c(coffee_QT = "Coffee intake, cups/day",
+               coffee_cat5 = "Coffee intake (4-level categorical)",
+               age="Age, year", sex= "Sex", bmi="BMI, kg/m2",
+               smoke_level.lab="Smoking Status", cigarettes_per_day = "Cigarettes per day", 
+               physact_level.lab="Physical Activity level", tea_QT = "Tea intake", 
+               alch_freq.lab="Alcohol use frequency", income_level.lab="Income level", 
+               educ_level.lab="Education level")
+
+print_summary_table(data=btc, vars_to_summarize = descr_vars, var_strata = "taste_diplos",
+                    var_strata_order = taste_diplotypes, digits = c(1,1,5),
+                    factor_vars = "t2d_case")
+  
+```
+
+Two x two tables for TAS2R38 bitter taste diplotype x coffee intake and T2D
+
+```{r}
+
+
+
+
+```
+
+
+
+
