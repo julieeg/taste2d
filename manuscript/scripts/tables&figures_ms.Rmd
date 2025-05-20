@@ -1,0 +1,785 @@
+---
+title: "Manuscript Tables & Figures"
+output: html_document
+date: "2025-05-18"
+---
+
+
+```{r setup, include=FALSE, echo=F, error=F, warning=F, message=F}
+
+knitr::opts_chunk$set(echo = F, error = F, warning = F, fig.align="center", 
+                      out.width = "90%", out.height = "50%", fig.height=5)
+
+lapply(c("tidyverse", "data.table", "paletteer", "ggpubr", "ggtext", #"gplots", "R3port", 
+         "xtable", "knitr", "tinytex", "emmeans", "ComplexHeatmap"),  library, character.only = TRUE)
+
+taste2d_dir <- "~/Documents/GitHub/taste2d/run/"
+
+lapply(list.files(paste0(taste2d_dir, "../../pantry/functions/"), full.names = T), source)
+```
+
+
+```{r}
+#Example markup figures: https://diabetologia-journal.org/wp-content/uploads/2023/08/Fig-mark-up-examples.pdf
+#Diabetologia Color Palette: https://diabetologia-journal.org/wp-content/uploads/2018/07/Colour-palette-for-flow-charts-and-graphs.pdf
+
+rgb2hex <- function(r,g,b) {
+  RGB=c(r,g,b) ; maxRGB=max(RGB)
+  hex=rgb(r,g,b,maxColorValue = 255)
+  return(hex)
+}
+
+#diabetologia_palette <- c(rgb2hex(242,222,196), rgb2hex(138,169,214), rgb2hex(76,89,136), rgb2hex(181,180,180))
+main_palette <- c(palettes$NatMainBackground2$Level4[2:1], palettes$NatMainBackground2$Level2[1], "grey80")  #palettes$nature_diplos_dominant[c(1,3:5)]
+snpdose_palette <- c(rgb2hex(170,196,226), rgb2hex(120,131,186), rgb2hex(96,108,158))
+
+```
+
+```{r}
+taste_diplos.labs <- c("AVI/AVI", "AVI/PAV", "PAV/PAV")
+taste_diplos <- c("AVI/AVI", "AVI/PAV", "PAV/PAV")
+taste_diplos_005.labs <- c(taste_diplos.labs, "AVI/AAV", "AAV/PAV")
+```
+
+
+## **Figure 1.** Distribution of TAS2R38 Haplotypes & Diplotypes 
+```{r, error=F, message=F, fig.height==4, fig.width=6}
+# ================================
+## Summary of Haplotypes
+# ================================
+
+tab_haplos <- readRDS(paste0(taste2d_dir, "../data/processed/manuscript/tab_descr_haplos_common.rda"))
+
+# color palette
+haplo_palette <- main_palette[c(1:2,4)]
+names(haplo_palette) <- paste(c("Nontaster", "Taster", "Non-canonical"), "haplotype")
+
+plot_haplos_AA <- tab_haplos %>% 
+  ggplot(aes(x=haplo_order, y=pct, fill=diplo_legend)) + 
+  geom_bar(stat = "identity") + 
+  scale_x_discrete(name = "**_TAS2R38_ Haplotype**") + 
+  scale_y_continuous(limits=c(0,62), breaks=seq(0,60,10)) +
+  ylab("Frequency (%)") + 
+  scale_fill_manual(values = haplo_palette, name=expression(italic("TAS2R38") ~ "Haplotypes (n)")) + 
+  ggtheme_fancy + 
+  theme(axis.text.x = element_text(size=8, color = "black", face="italic"), #angle=25, hjust=1, 
+        axis.title.x = element_markdown(),
+        axis.title = element_text(color = "black", face = "bold", size=10),
+        axis.text.y = element_text(size=8, color = "black"),
+        
+        legend.position = "inside",
+        legend.text = element_text(size=8), legend.title=element_blank(),
+        legend.position.inside = c(0.99, 0.98),  # Moves legend to top-right inside plot
+        legend.justification.inside = c(1, 1),  # Aligns legend's top-right corner
+        legend.background = element_rect(fill = "white", color = "black", linewidth=0.15), 
+          
+        legend.key.size = unit(1, 'line'),
+        legend.margin = margin(3,3,3,3, unit="pt")
+        ) +
+    geom_text(aes(label=n), vjust=-0.35, size=3.0)
+
+plot_haplos_AA
+```
+
+```{r}
+# ================================
+## Summary of Diplotypes
+# ================================
+
+tab_diplos <- readRDS(paste0(taste2d_dir, "../data/processed/manuscript/tab_descr_diplos_common.rda"))
+
+diplo_palette <- main_palette
+names(diplo_palette) <- paste(c("Nontaster", "Taster", "Supertaster", "Non-canonical"), "diplotype")
+
+plot_diplo_AA <- tab_diplos %>%
+  ggplot(aes(x=diplos_AA_order, y=pct*100, fill=diplo_legend)) + 
+  geom_bar(stat = "identity") + scale_x_discrete(name = "**_TAS2R38_ Diplotypes**") + 
+  scale_y_continuous(limits=c(0,52), breaks=seq(0,50,10)) + ylab("Frequency (%)") + 
+  scale_fill_manual(values = diplo_palette, name=expression(italic("TAS2R38") ~ "Diplotypes (n)")) + 
+  ggtheme_fancy +
+    theme(axis.text.x = element_text(size=8, color = "black", face="italic"), #angle=25, hjust=1, 
+          axis.text.y = element_text(size=8, color = "black"),
+          axis.title.x = element_markdown(),
+          axis.title = element_text(color = "black", face = "bold", size=10),
+          
+          legend.position = "inside",
+          legend.text = element_text(size=8), legend.title=element_blank(),
+          legend.position.inside = c(0.99, 0.98),  # Moves legend to top-right inside plot
+          legend.justification.inside = c(1, 1),  # Aligns legend's top-right corner
+          legend.background = element_rect(fill = "white", color = "black", linewidth=0.15), 
+          
+          legend.key.size = unit(1, 'line'),
+          legend.margin = margin(3,3,3,3, unit="pt"),
+          
+          ) +  # Optional: Add background
+  geom_text(aes(label=n), vjust=-0.35, size=3.0) ; plot_diplo_AA
+```
+
+```{r}
+# =================================================
+# Panel plot of TAS2R38 haplotypes & diplotypes 
+# =================================================
+plot_haplo_diplo_AA <- ggarrange(
+  plot_haplos_AA, "",  plot_diplo_AA, ncol=3, 
+  widths=c(0.75, 0.05, 1), align = c("hv"), labels=c("A", "", "B")
+  )
+
+plot_haplo_diplo_AA %>% ggsave(filename=paste0(taste2d_dir, "../manuscript/output/fig_descr_genodistrib_panel.pdf"), 
+                               height=3.75, width=9.15)
+```
+
+
+## Table 1. Descriptive characteristics 
+```{r, include=T}
+table1 <- read.csv(paste0(taste2d_dir, "../data/processed/manuscript/tab_descr_basic_diplo_taste.csv"))
+table1 %>% kable(caption="Descriptive Table 1")
+```
+
+##### Table 2. Primary associations of TAS2R38 diplotype with random and 0-2hr glucose
+```{r}
+# Categorical diplotype
+tab_glu_diplocat <- rbind.data.frame(
+  make_pretty_lm(fread(paste0(taste2d_dir,"../data/processed/manuscript/tab_res_rg_diplocat_basebmi.csv"))), 
+  make_pretty_lm(fread(paste0(taste2d_dir,"../data/processed/manuscript/tab_res_2hg_diplocat_basebmi.csv"))) 
+  ) #%>% fwrite(paste0(taste2d_dir,"../manuscript/output/tab_res_glu_diplocat_basebmi.csv"))
+
+# Continuous diplotype
+tab_glu_diplocont <- rbind.data.frame(
+  make_pretty_lm(fread(paste0(taste2d_dir,"../data/processed/manuscript/tab_res_rg_diplocont_basebmi.csv"))), 
+  make_pretty_lm(fread(paste0(taste2d_dir,"../data/processed/manuscript/tab_res_2hg_diplocont_basebmi.csv"))) 
+  ) %>% mutate(P_f.test = "-", P_trend.test = "-") #%>% fwrite(paste0(taste2d_dir,"../manuscript/output/tab_res_glu_diplocat_basebmi.csv"))
+
+tas2r38_lvls <- c("TAS2R38 diplotype, per PAV haplotype", "AVI/AVI","AVI/PAV","PAV/PAV")
+
+rbind.data.frame(tab_glu_diplocat, tab_glu_diplocont) %>%
+  mutate_at("Exposure", ~factor(gsub("taste_diplos.num", "TAS2R38 diplotype, per PAV haplotype", .),levels=tas2r38_lvls)) %>%
+  mutate_at("Outcome",~factor(., levels=c("Glucose (mg/dL)", "0-2hr Glucose (mg/dL)"))) %>%
+  arrange(Outcome, desc(Model), Exposure) %>%
+  fwrite(paste0(taste2d_dir, "../manuscript/output/tab_res_glu_diplo_basebmi_print.csv"))
+```
+
+##### Supplementary Table: Associations of TAS2R38 diplotype with glucose levels at subsequent fasting windows
+```{r}
+tab_gluXfast_diplocat <- make_pretty_lm(
+  fread(paste0(taste2d_dir, outDir, "/tab_res_gluXfast_diplocat_basebmi.csv"))) %>%
+  filter(Model == "BMI")
+
+tab_gluXfast_diplocont <- make_pretty_lm(
+  fread(paste0(taste2d_dir, outDir, "/tab_res_gluXfast_diplocont_basebmi.csv"))) %>%
+  filter(Model == "BMI") %>%
+  mutate(P_f.test = "-", P_trend.test = "-")
+
+rbind.data.frame(tab_gluXfast_diplocat, tab_gluXfast_diplocont) %>%
+  mutate_at("Exposure", ~factor(gsub("taste_diplos.num", "TAS2R38 diplotype, per PAV haplotype", .),levels=tas2r38_lvls)) %>%
+  arrange(Outcome, desc(Model), Exposure) %>%
+  fwrite(paste0(taste2d_dir, "../manuscript/output/tab_res_glu_diploXfast_bmi_print.csv"))
+
+```
+
+Figure 2: Panel plot of primary associations of TAS2R38 with glucose homeostasis & replication
+```{r}
+
+## Set ggtheme for Figure 2 --------------------
+
+fig2_ggtheme <- theme(
+  axis.title.x = element_text(size=8, face="bold", vjust=3), 
+  axis.title.y = element_text(size=8, face="bold", vjust=-2), 
+  axis.text.x = element_text(size=7, color="black"), 
+  axis.text.y = element_text(size=7),
+  panel.grid.major.y = element_line(linewidth = 0.25), 
+  strip.background = element_blank(), 
+  panel.grid.minor = element_blank(),
+  panel.grid.major.x = element_blank(),
+  panel.background = element_rect(fill="#00000000"),
+  strip.text = element_text(face="bold", size=8), 
+        
+  legend.position = "inside",
+  legend.title = element_markdown(face="bold", size=8, margin = margin(0,0,2.5,0)), #element_text(face="bold", size=9),
+  legend.text = element_text(size=7, face="italic"), #legend.title=element_blank(),
+  legend.position.inside = c(0.99, 0.98),  # Moves legend to top-right inside plot
+  legend.justification.inside = c(1, 1),  # Aligns legend's top-right corner
+  legend.background = element_rect(fill = "white", color = "black", linewidth=0.15), 
+          
+  legend.key.size = unit(0.65, 'line'),
+  legend.margin = margin(2,2,2,2, unit="pt"),
+  plot.margin=margin(1,4,1,1, unit="line")
+)
+
+
+diplo_palette <- main_palette#taste_palette
+```
+
+
+```{r}
+# ===========================================================
+## Panel A: EMM glucose by TAS2R38 at each fasting interval 
+# ===========================================================
+
+## Load in data --------------------
+
+# note: onlhy include up to 6-12 hr, b/c of variability in 12-24 range
+emm_glu_mgdl_bmi <- rbind.data.frame(
+  read.csv(paste0(taste2d_dir, outDir, "/tab_res_emm_glu_diplo_bmi.csv")) %>%
+    mutate(fast = "Random", .after=model), 
+  read.csv(paste0(taste2d_dir, outDir, "/tab_res_emm_gluXfast_6to12_diplo_bmi.csv"))
+) ; emm_glu_mgdl_bmi
+
+
+## Plot panel A --------------------
+
+panelA <- emm_glu_mgdl_bmi %>%
+  filter(fast != "12+hr") %>%
+  mutate(fast=factor(fast, levels=rev(c("6to12hr", "5hr", "4hr", "3hr", "0to2hr", "Random")),
+                     labels=rev(c("6-12 hr", "5 hr", "4 hr", "3 hr", "0-2 hr", "Anytime from\n0-12 hrs"))),
+         Diplotypes = factor(level, levels=c("AVI/AVI", "AVI/PAV", "PAV/PAV"))) %>%
+  mutate(type = factor(ifelse(fast=="Anytime from\n0-12 hrs", "Random", "Fasting"), levels=c("Random", "Fasting"))) %>%
+  ggplot(aes(y=emmean, x=fast, ymin=lowCI, ymax=upCI, color=Diplotypes)) + 
+  #facet_grid(~type, scale="free", space="free_x", labeller = as_labeller(c("Random" = "Random Glucose", "Fasting"="Glucose by Self-Reported Fasting Time"))) +
+  facet_grid(~type, scale="free", space="free_x", labeller = as_labeller(c("Random" = "", "Fasting"=""))) +
+  scale_y_continuous(limits=c(87.25, 90), breaks=seq(87.5,90,0.5)) +
+  geom_point(size=1.75, position=position_dodge(0.35)) + 
+  geom_errorbar(width=0.15, position=position_dodge(0.35), linewidth=0.45) + 
+  scale_color_manual(values=diplo_palette, name="**_TAS2R38_ Diplotype**") +
+  ylab("Glucose level (mg/dL)\n") + xlab("Self-reported fasting window (hr)") + 
+  theme_bw() + 
+  fig2_ggtheme; panelA
+```
+
+```{r}
+# ==============================================
+## Panel B: EMM 0-2 hr glucose by TAS2R38 SNP
+# ==============================================
+
+## Load in data --------------------
+emm_tas2r38snps_glu2hr <- read.csv(paste0(taste2d_dir, outDir, "/tab_sens_emm_gluXfast_tas2r38snps_bmi.csv"))
+
+tas2r38_snps_cat <- paste0(tas2r38_snps, ".cat")
+snps_fancy <- c("rs713598 (C>G)", "rs1726866 (G>A)", "rs10246939 (T>C)")
+snps_fancy_2row <- c("rs713598\n(C>G)", "rs1726866\n(G>A)", "rs10246939\n(T>C)")
+
+
+panelB <- emm_tas2r38snps_glu2hr %>% 
+  as.data.frame() %>%
+  dplyr::mutate(fast = factor(fast, levels=c("6+hr", "5hr", "4hr", "3hr", "0to2hr"),
+                       labels =c(">6 hrs", "5 hrs", "4 hrs", "3 hrs", "0-2 hrs")),
+         Genotypes = factor(level, levels=c("0_0","0_1", "1_1"), labels=c("00", "01", "11")), .before=outcome) %>%
+  filter(exposure %in% c("rs713598_G.cat", "rs1726866_G.cat", "rs10246939_C.cat")) %>%
+  mutate(SNP = rep(tas2r38_snps, each=3), .before=level) %>%
+  mutate(SNP=factor(SNP, levels=tas2r38_snps, labels=snps_fancy_2row)) %>%
+  ggplot(aes(y=emmean-88.5, x=SNP, ymin=lowCI-88.5, ymax=upCI-88.5, color=Genotypes)) + 
+  scale_y_continuous(limits=c(0,2), breaks=seq(0,2,0.5), labels = sprintf("%.1f", seq(0,2,0.5)+88.5)) + #
+  geom_errorbar(position=position_dodge(0.35), linewidth=0.35, width=0.15) + 
+  geom_point(size=1.75, position=position_dodge(0.35), shape=17) + 
+  scale_color_manual(values=c(as.vector(diplo_palette)), name=paste0("Genotype for\nBitter Allele")) + 
+  ylab("Glucose level (mg/dL)") + xlab("**_TAS2R38_** functional variants") +
+  ggtitle("0-2 hr Glucose, mg/dL ") +
+  guides(color=guide_legend(override.aes = list(size=1.5))) +
+  theme_bw() +
+  fig2_ggtheme + theme(
+    axis.title.y = element_text(size=7, face="bold", margin = margin(r=5)), 
+        axis.title.x = element_markdown(size=7, face="bold", margin = margin(t=3)), 
+        axis.text.x = element_text(size=6, color="black"), 
+        axis.text.y = element_text(size=6, color="black"),
+        
+        legend.title = element_markdown(face="bold", size=6, margin = margin(0,3.5,0,0)), #element_text(face="bold", size=9),
+        legend.text = element_text(size=6), #legend.title=element_blank(),
+  
+        legend.key.size = unit(0.5, 'line'),
+        legend.spacing.y = unit(0.01,"cm"),
+        legend.direction = "horizontal",
+        plot.margin=margin(1,1,1.25,3,unit="line"),
+        plot.title=element_text(size=8, hjust=0.5, margin=margin(b=1)) 
+    ) ; panelB
+```
+
+```{r}
+# ==============================================================================
+## Panel C: Variant-level associations (cont) with 0-2hr glucose in UKB & MAGIC
+# ==============================================================================
+
+# Set palettes and plot themes ----------------
+
+study_palette <- c(UKBB=as.vector(diplo_palette)[3], MAGIC=rgb2hex(192,65,64))
+snpplot_theme <- 
+
+# Load in data --------------------
+
+# variant-level associations in UKB
+snps_glu_bmi_ukb <- fread(paste0(taste2d_dir, outDir, "/tab_res_2hg_tas2r38snps_bmi.csv")) %>%
+  mutate(snp = c("rs713598 (C>G)", "rs1726866 (G>A)", "rs10246939 (T>C)")) %>%
+  mutate(Study="UKBB (0-2hr)") %>%
+  select(Study, snp, beta, se, p)
+
+# variant-level associations in MAGIC (independent replication)
+snps_glu_bmi_magic <- fread(paste0(taste2d_dir, outDir, "/tab_repl_glu_tas2r38_magic.csv")) %>%
+  mutate(Study = "MAGIC (2-hr\nOGTT)") %>%
+  select(Study, snp=SNP, beta=Beta, se=SE, p=P_value) %>%
+  mutate(across(c("beta", "se"), ~.*18.018)) %>%
+  mutate(snp = c("rs713598 (C>G)", "rs1726866 (G>A)", "rs10246939 (T>C)"))
+
+# combined plot
+snps_glu_bmi_combn <- rbind.data.frame(snps_glu_bmi_ukb, snps_glu_bmi_magic) %>%
+  # Add row for diplotype-level association in UKB
+  bind_rows(cbind.data.frame(Study="UKBB (0-2hr)", snp="TAS2R38 Diplotype", beta=-0.23, se=0.07653061,p=0.003)) %>%
+  mutate(snp=factor(snp, levels=c(rev(snps_fancy), "TAS2R38 Diplotype"))) %>%
+  mutate(Study=factor(Study,levels=c("MAGIC (2-hr\nOGTT)", "UKBB (0-2hr)"))) %>% 
+  mutate(geno = c(rep("Variant",6), "Diplotype"))
+
+
+## Plot Panel C --------------------
+
+panelC <- snps_glu_bmi_combn %>%
+  ggplot(aes(y=snp, x=beta, xmin=beta-1.96*se, xmax=beta+1.96*se, color=Study, shape=geno)) + 
+  geom_point(size=1.25, position=position_dodge(0.55)) + 
+  geom_errorbarh(height=0.25, position=position_dodge(0.55), linewidth=0.35)  + 
+  geom_vline(xintercept = 0) + 
+  scale_x_continuous(limits = c(-2.5,0.5), breaks=seq(-2.5, 0.5, 0.5)) +
+  scale_color_manual(values=as.vector(study_palette)) +
+  scale_shape_manual(values=c(19,17), name="Genetic\nExposure") +
+  ylab("") + xlab("Beta (95% CI)") +
+  guides(color=guide_legend(reverse = T, override.aes = list(size=1)),
+         shape=guide_legend(override.aes = list(size=1))) +
+  ggtitle("Glucose level, mg/dL") +
+  theme_bw() + fig2_ggtheme + theme(
+    axis.text = element_text(color="black"),
+    axis.title.x = element_text(size=7, face="bold", margin=margin(t=3)), 
+    axis.text.x = element_text(size=6), 
+    axis.text.y = element_text(size=6),
+    
+    panel.grid.major.y = element_blank(), 
+    panel.grid.major.x = element_line(linewidth = 0.25), 
+    
+    legend.position = "right",
+    legend.title = element_markdown(face="bold", size=5, margin = margin(0,0,0.5,0)), #element_text(face="bold", size=9),
+    legend.text = element_text(size=5, margin = margin(0,0,0.15,0)), #legend.title=element_blank(),
+    
+    legend.background = element_rect(fill = "white", color = "black", linewidth=0.15), 
+    #legend.key.size = unit(0.5, 'line'),
+    legend.key.spacing = unit(0.1, "cm"),
+    legend.margin = margin(0.5,0.5,0.5,0.5),
+    #legend.margin = margin(1,2,2,1, unit="pt"),
+    legend.spacing = unit(2,unit="line"),
+    legend.spacing.y = unit(0.1,"cm"),
+    legend.box.margin = margin(0,0,0,-5),
+    
+    plot.margin=margin(1,1,1,1,unit="line"),
+    plot.title=element_text(size=8, hjust=0.5, margin=margin(b=1))
+    ) ; panelC
+```
+
+```{r}
+# ==================
+## Combine panels
+# ==================
+panelBC <- ggarrange(panelB, panelC, nrow=1, labels=c("   B", " C"), align="h", font.label = list(size=12), vjust=3)
+Fig2_allpanels <- ggarrange(panelA, panelBC, nrow=2, heights=c(2.75,2.25), labels = c(" A", " "), font.label = list(size=12), vjust=3)
+Fig2_allpanels
+
+#Fig2_allpanels %>% ggsave(filename=paste0(taste2d_dir, "../manuscript/output/fig_res_glu_diplo_tas2r38_panel_v2.pdf"), height=5, width=7)
+```
+
+Variant-level associations 
+```{r}
+# Categorical diplotype
+tab_glu_diplocat <- rbind.data.frame(
+  make_pretty_lm(fread(paste0(taste2d_dir,"../data/processed/manuscript/tab_res_rg_diplocat_basebmi.csv"))), 
+  make_pretty_lm(fread(paste0(taste2d_dir,"../data/processed/manuscript/tab_res_2hg_diplocat_basebmi.csv"))) 
+  ) #%>% fwrite(paste0(taste2d_dir,"../manuscript/output/tab_res_glu_diplocat_basebmi.csv"))
+
+# Continuous diplotype
+tab_glu_diplocont <- rbind.data.frame(
+  make_pretty_lm(fread(paste0(taste2d_dir,"../data/processed/manuscript/tab_res_rg_diplocont_basebmi.csv"))), 
+  make_pretty_lm(fread(paste0(taste2d_dir,"../data/processed/manuscript/tab_res_2hg_diplocont_basebmi.csv"))) 
+  ) %>% mutate(P_f.test = "-", P_trend.test = "-") #%>% fwrite(paste0(taste2d_dir,"../manuscript/output/tab_res_glu_diplocat_basebmi.csv"))
+
+tas2r38_lvls <- c("TAS2R38 diplotype, per PAV haplotype", "AVI/AVI","AVI/PAV","PAV/PAV")
+
+rbind.data.frame(tab_glu_diplocat, tab_glu_diplocont) %>%
+  mutate_at("Exposure", ~factor(gsub("taste_diplos.num", "TAS2R38 diplotype, per PAV haplotype", .),levels=tas2r38_lvls)) %>%
+  mutate_at("Outcome",~factor(., levels=c("Glucose (mg/dL)", "0-2hr Glucose (mg/dL)"))) %>%
+  arrange(Outcome, desc(Model), Exposure) %>%
+  fwrite(paste0(taste2d_dir, "../manuscript/output/tab_res_glu_diplo_basebmi_print.csv"))
+```
+
+
+
+##### Supplementary Figure: Dot plot for TAS2R38 & waterfall for glucose significance
+```{r}
+# ===========================================================
+## Panel A: TAS2R38 associations with behavioral covariates
+# ===========================================================
+
+
+panelA.supp <-  fread(paste0(taste2d_dir, outDir, "/tab_sens_behavcovars_diplo_bmi.csv"))  %>%
+  arrange(beta) %>%
+   mutate(Color=ifelse(as.numeric(p) < .05 & beta<0, "A",
+                      ifelse(p>0.05 & beta<0, "B", 
+                             ifelse(p<0.05 & beta>0, "D", "C")))) %>%
+  mutate(Diet=model) %>%
+  mutate(Diet=factor(model, levels=Diet[order(beta)])) %>% 
+  ggplot(aes(x=beta, xmin=beta-1.96*se, xmax=beta+1.96*se, y=Diet, color=Color)) + 
+  geom_vline(xintercept = 0, linewidth=0.35) +
+  geom_point(size=1) + 
+  geom_errorbarh(height=0.35, linewidth=0.35) + 
+  scale_color_manual(values=c(palettes$hm_palette_rwb[c(10,30,70,90)])) +
+  #scale_x_continuous(limits=c(-2,2.5), breaks=seq(-2,2.5,1)) +
+  theme_bw() + ylab("") + xlab("Beta (95% CI)") + 
+  coord_flip() + ggtitle("TAS2R38 - Diet/Lifestyle Associations") +
+  theme(panel.grid.minor = element_blank(),
+       panel.grid.major.x = element_blank(),
+       panel.grid.major.y = element_line(linewidth=0.2),
+       legend.text = element_markdown(size=5),
+       axis.text.y = element_text(color="black", size = 6),
+       axis.text.x = element_text(color="black", size = 6, vjust=0.5, hjust=1, angle=90),
+       axis.ticks = element_line(linewidth=0.1),
+       axis.title = element_text(face="bold", size=6, margin=margin(t=3)),
+        
+       legend.position = "right",
+       legend.title = element_text(face="bold", size=5, margin = margin(0,0,2.5,0)), #element_text(face="bold", size=9),
+       legend.background = element_rect(fill = "white", color = "black", linewidth=0.15), 
+       legend.key.size = unit(0.5, 'line'),
+       legend.margin = margin(1,1,2,1, unit="pt"),
+       legend.spacing = unit(1,unit="line"),
+       legend.box.margin = margin(0,0,0,-5),
+       plot.title=element_text(size=8, margin=margin(b=1))
+        ) ; panelA.supp
+
+# ==================================================================
+## Panel B: Association of behavioral covars with 0-2 hr glucose 
+# ==================================================================
+
+panelB.supp <- fread(paste0(taste2d_dir, outDir, "/tab_sens_glu2hr_behavcovars_bmi.csv")) %>%
+  mutate(Diet=model) %>%
+  mutate(logp=-log10(p)) %>%
+  mutate(Color=ifelse(beta<0 & p<.05/31, "A",
+                      ifelse(p>0.05/32 & beta<0, "B", 
+                             ifelse(beta>0 & p<.05/31, "D", "C")))) %>%
+  mutate(dir=ifelse(beta<0,-logp,logp)) %>%
+  mutate(Diet=factor(Diet, levels=Diet[order(dir)])) %>%
+  ggplot(aes(x=logp, y=Diet, fill=Color)) + 
+  geom_bar(stat="identity") + 
+  geom_vline(xintercept = 0, color="black", linewidth=0.55) + 
+  geom_vline(xintercept = -log10(0.05/24), linetype="dashed", color="black", linewidth=0.25) +
+  geom_vline(xintercept = -log10(0.05), linetype="longdash", color="black", linewidth=0.25) +
+  scale_fill_manual(values=c(palettes$hm_palette_rwb[c(10,30,70,90)])) +
+  xlab("-log10(P)") + ylab("") + ggtitle("0-2 hr Glucose, mg/dL") +
+  theme_bw() + theme(
+    panel.grid = element_blank(),
+    axis.text.y=element_text(size=6, color="black"),
+    axis.text.x=element_text(size=6, color="black"),
+    axis.title = element_text(size=6, face="bold"),
+    legend.position = "inside",
+    legend.text = element_text(size=5), legend.title=element_blank(),
+    legend.position.inside = c(0.99, 0.98),  # Moves legend to top-right inside plot
+    legend.justification.inside = c(1, 1),  # Aligns legend's top-right corner
+    legend.background = element_rect(fill = "white", color = "black", linewidth=0.15), 
+          
+    legend.key.size = unit(1, 'line'),
+    legend.margin = margin(3,3,3,3, unit="pt"),
+    plot.margin=margin(1,1,2,1, unit="line"),
+    plot.title=element_text(size=8, margin=margin(b=1))
+    ) ; panelB.supp
+
+
+###########################
+### Combine panel plots ###
+###########################
+
+ggarrange(panelA.supp, "", panelB.supp, widths=c(1.65, 0.05, 1.15),nrow=1, 
+          labels = c("A", "", "B"), common.legend = T, legend = "bottom") %>% 
+  ggsave(filename=paste0(taste2d_dir, "../manuscript/output/fig_suppl_behav_covars.pdf"), height=3.5, width=8) 
+
+```
+
+
+### Figure 3. Plot of sensitivity analysis, adjusting for dietary and lifestyle habits
+```{r}
+## Set ggthemes for Figure 3 --------------------
+
+fig3_theme <- theme(
+  panel.grid.minor = element_blank(),
+  panel.grid.major.y = element_blank(),
+  axis.text.x=element_text(color="black",size=7),
+  axis.text.y=element_text(color="black",size=7),
+  axis.title = element_text(color="black", face="bold",size=7),
+  plot.margin = margin(1,1,1,1, unit="line"),
+  plot.title = element_text(size=7, margin=margin(b=0.1,unit="line"))
+)
+
+fig3_legend <- theme(
+  legend.position = "inside",
+  legend.text = element_markdown(size=6, margin=margin(r=5, unit="pt")), 
+  legend.title=element_text(size=6, face="bold", margin=margin(b=2, unit="pt")),
+  legend.position.inside = c(0.98, 0.02),  # Moves legend to bottom-right inside plot
+  legend.justification = c("right", "bottom"),  # Aligns legend's top-right corner
+  legend.background = element_rect(fill = "white", color = "black", linewidth=0.15), 
+  legend.key.size = unit(0.55, 'line'),
+  legend.margin = margin(3,3,3,3, unit="pt")
+)
+```
+
+```{r}
+# ================================================
+## Panel A/B: LRT P-values for covariate quality
+# ================================================
+
+covar_qual <- left_join(
+  fread(paste0(taste2d_dir, outDir, "/tab_res_glu_diplo_behav.csv")), 
+  fread(paste0(taste2d_dir, outDir, "/tab_res_behav_covars_bmi.csv")),
+  by="Model")
+
+panelA <- covar_qual %>%
+  mutate(diffR2 = (baseR2-r2_diet_diplo$baseR2[1])*100) %>%
+  mutate(LRT = c(0.1, -log10(lrt_diet_diplo$pLRT))) %>%
+  select(Model, LRT) %>%
+  mutate(Model=factor(Model, levels=rev(c(names(adj_models))))) %>%
+  ggplot(aes(y=Model, x=LRT)) + 
+  geom_bar(stat="identity", width=0.6,fill= "grey") + 
+  xlab("-log10(P) for LRT (vs BMI Model)") + ylab("") +
+  theme_bw() + 
+  geom_vline(xintercept = 0, linewidth=0.35) +
+  geom_vline(xintercept = -log10(.05), linetype="longdash", linewidth=0.55) +
+  ggtitle("Covariate Associations w/ 0-2hr Glucose") +
+  fig3_theme + theme(
+    plot.title = element_text(size=6.5, margin=margin(b=0.1,unit="line"))) ;  panelA
+
+# ================================================
+## Panel B: Behaviorally-adjusted associations
+# ================================================
+
+panelB <- covar_qual  %>% 
+  mutate(lowCI=beta-1.96*se, upCI=beta+1.96*se) %>%
+  mutate(Model=factor(Model, levels=rev(c(names(adj_models))))) %>%
+  ggplot(aes(y=Model, x=beta, xmin=lowCI, xmax=upCI)) + 
+  geom_errorbarh(height=0.25, linewidth=0.55, color=diplo_palette[2]) + 
+  geom_point(size=2, color=diplo_palette[2]) + 
+  geom_vline(xintercept = 0) + 
+  xlab("Beta (95% CI) for _TAS2R38_ Diplotype") + ylab("") + #ylab("\nCovariate Adjustments") +
+  theme_bw() + 
+  scale_x_continuous(limits=c(-0.5,0.1)) +
+  ggtitle("_TAS2R38_ Associations with 0-2hr Glucose") +
+  fig3_theme + theme(
+    axis.title.x = element_markdown(size=7, color="black"),
+    plot.title = element_markdown(size=6.5, margin=margin(b=0.1,unit="line"))); panelB
+
+panelAB <- ggarrange(panelA, panelB, ncol=1, align="v") 
+```
+
+```{r}
+# ======================================================================
+## Panel C: Negative Control variants associate similarly with diet
+## traits that are associated with 0-2 hr Glucose
+# ======================================================================
+
+behav_covars_sel <- c("tea_QT", "coffee_QT", "addsalt_3lvl.lab", "alch_freq.lab", "cereal_intake_QT", 
+                      "spread_type_butter_vs_any_other_BIN", "bread_type_white_vs_brown_or_whole_BIN", 
+                      "fresh_fruit_QT", "procmeat_QT")
+
+
+negcntrl_behav <- fread(paste0(taste2d_dir, outDir, "/tab_sens_dietlife_negcntrl_snps_bmi.csv")) %>%
+  rename(SNP=exposure, behav=outcome) %>%
+  filter(behav %in% behav_covars_sel)
+
+# set color palette
+negcontrl_palette <- c(rs10772420_A=rgb2hex(109,165,103), rs2597979_G=rgb2hex(193,121,99),
+                       rs713598_G=diplo_palette[[2]], rs1726866_G=diplo_palette[[2]], 
+                       rs10246939_C=diplo_palette[[2]])
+
+negcontrl_palette <- c(diplo_palette[[2]],rgb2hex(109,165,103), rgb2hex(193,121,99))
+names(negcontrl_palette) <- snp_labels[c(1,4:5)]
+
+panelC <- negcntrl_behav %>%
+  mutate(snp=factor(SNP, levels=rev(bitter_snps))) %>%
+  mutate(behav=behav_covars.labs[behav]) %>% 
+  mutate(behav=ifelse(behav=="addsalt_3lvl.lab", "Frequency of adding\nsalt to food",
+                      ifelse(behav=="alch_freq.lab", "Alcohol use frequency", behav))) %>%
+  mutate(snp_label = factor(snp, levels=bitter_snps, labels=snp_labels)) %>%
+  filter(behav != "Frequency of adding\nsalt to food") %>%
+  mutate(behav = factor(behav, levels=rev(unique(behav[order(p)])))) %>%  
+  ggplot(aes(x=-log10(p), y=behav, fill=snp_label, group=snp)) + 
+  geom_bar(stat="identity", position=position_dodge(0.65), width=0.6) + 
+  xlab("-log10(P)") + ylab("") + 
+  theme_bw() + 
+  scale_fill_manual(values=c(negcontrl_palette), name="Bitter Taste Variant") +
+  geom_vline(xintercept = 0, linewidth=0.35) +
+  geom_vline(xintercept = -log10(0.05), linetype="longdash", linewidth=0.25) +
+  guides(fill=guide_legend(reverse = T)) +
+  ggtitle("Diet/Lifestyle Traits Associated with 0-2hr Glucose") +
+  fig3_theme + fig3_legend + 
+  theme(axis.text.y=element_text(color="black", size=7)) ; panelC
+
+#panelC %>% ggsave(filename="../output/manuscript/plot_figure3_panelC_v2.pdf", height=2.5, width=5)
+
+
+# ======================================================================
+## panel C: Associations of TAS2R38 and Negative Control variants with
+## 0-2hr glucose, before and after adjusting for diet/lifestyle
+# ======================================================================
+
+## EMM in the fully-adjusted model
+emm_bittersnps_glu2hr <- do.call(rbind.data.frame, lapply(bitter_snps_cat, function(snp) {
+  do.call(rbind.data.frame, lapply(1:length(adj_models), function(m) {
+    get_emm.fun(exposure = snp, outcome = "glu2hr_mgdl", covars = adj_models[[m]], 
+                reference = "0_0", data=analysis)$emm })) %>%
+    mutate(Model = names(adj_models)[m])
+     })) ; emm_bittersnps_glu2hr <- emm_bittersnps_glu2hr %>% mutate(
+  Model = rep(rep(names(adj_models), each=3),length(bitter_snps_cat))
+)
+
+emm_snps_glu <- emm_bittersnps_glu2hr %>% 
+  mutate(model=Model) %>%
+  filter(Model=="Lifestyle+Diet")
+
+negcontl_dose_palette <- c(TAS2R38_0=diplo_palette[[1]], TAS2R38_1=diplo_palette[[2]], TAS2R38_2=diplo_palette[[3]],
+                           TAS2R14_0=rgb2hex(152,201,139), TAS2R14_1=rgb2hex(109,165,103), TAS2R14_2=rgb2hex(99,122,98),
+                           TAS2R9_0=rgb2hex(214,159,151), TAS2R9_1=rgb2hex(193,121,99), TAS2R9_2=rgb2hex(150,102,90))
+legend_dose <- data.frame(
+  Label = c("0 alleles", "1 allele", "2 alleles"),
+  Color = c("#CCCCCC", "#7F7F7F", "#000000"),
+  x = 1, y = 1
+)
+
+label = c("Line 1<br><i>Group A</i>", "Line 1<br><i>Group B</i>")
+
+gene_labels <- c(paste0("<i>TAS2R38</i><br>(", bitter_snps[1:3], ")"), 
+                 "<i>TAS2R14</i><br>(rs10772420_A)", "<i>TAS2R19</i><br>(rs2597979_G)")
+names(gene_labels) <- bitter_snps 
+gene_labels_lineheight <- paste0("<span style='line-height:1.5'>", gene_labels) ; names(gene_labels_lineheight)<-gene_labels
+
+panelD <- emm_snps_glu %>%
+  mutate(across(c(emmean, SE, lowCI, upCI), ~as.numeric(.))) %>%
+  mutate(Genotypes = factor(level, levels=c("0_0","0_1", "1_1"), labels=c("00", "01", "11")), .before=outcome) %>%
+  mutate(snp = factor(gsub(".cat", "", exposure), levels=bitter_snps)) %>%
+  mutate(snp_label = case_when(snp %in% bitter_snps[1:3] & level=="0_0"~"TAS2R38_0",
+                               snp %in% bitter_snps[1:3] & level=="0_1"~"TAS2R38_1",
+                               snp %in% bitter_snps[1:3] & level=="1_1"~"TAS2R38_2",
+                               snp == bitter_snps[4] & level=="0_0"~"TAS2R14_0",
+                               snp == bitter_snps[4] & level=="0_1"~"TAS2R14_1",
+                               snp == bitter_snps[4] & level=="1_1"~"TAS2R14_2",
+                               snp == bitter_snps[5] & level=="0_0"~"TAS2R9_0",
+                               snp == bitter_snps[5] & level=="0_1"~"TAS2R9_1",
+                               snp == bitter_snps[5] & level=="1_1"~"TAS2R9_2")) %>%
+  mutate(snp_label = factor(snp_label, levels=names(negcontl_dose_palette))) %>%
+  mutate(gene_snp = factor(snp, levels=bitter_snps, labels=c(gene_labels))) %>%
+  ggplot(aes(y=emmean-88.25, x=gene_snp, ymin=lowCI-88.25, ymax=upCI-88.25, color=snp_label)) + 
+  scale_y_continuous(limits=c(-0.5,2), breaks=seq(-0.5,2,0.5), labels = seq(-0.5,2,0.5)+88) +
+  geom_point(position=position_dodge(0.35), size=1.25, shape=17) + 
+  geom_errorbar(position=position_dodge(0.35), linewidth=0.35, width=0.15) + 
+  scale_color_manual(values=c(negcontl_dose_palette), name="Bitter Taste Variant", guide=NULL) + 
+  ylab("Blood glucose (mg/dL)") + xlab("") +
+  theme_bw() +
+  fig3_theme + fig3_legend +
+  theme(panel.grid.major.y = element_line(),
+        panel.grid.major.x = element_blank(),
+        axis.text.y = element_text(color="black", size=6),
+        axis.text.x = element_markdown(color="black", size=6.5, lineheight=1.35),
+        axis.title.y = element_text(color="black", size=7),
+        #legend.position = "none",
+        plot.margin=margin(0,1,1,2, unit="line"))  + 
+  ## Add custom legend for dosage in greyscale
+  geom_point(data = legend_dose, mapping = aes(x = x, y = y, fill = Label),
+             inherit.aes = FALSE, shape=17, size = 0, alpha = 0,          # invisible
+             show.legend = TRUE) +
+  scale_fill_manual(values = c(legend_dose$Color), name = "# Bitter Taste Alleles ") + 
+  guides(fill=guide_legend(override.aes = list(size=2, alpha=1, color=legend_dose$Color))) + 
+  fig3_legend + theme(
+    legend.direction = "horizontal",
+    legend.position = c(0.5, 0.98),  # Moves legend to bottom-right inside plot
+    legend.justification = c(0.5, 1),
+    legend.key.size = unit(0.55, 'line'),
+    legend.margin = margin(3,3,3,3, unit="pt"),
+    legend.title = element_text(margin=margin(r=4, b=0, unit="pt")),
+    legend.background = element_rect(fill = "white", color = "black", linewidth=0.15), 
+    ) ; panelD
+
+```
+
+```{r}
+ggarrange(
+  ggarrange(panelA, panelB, ncol=1, align="v", labels=c("A","B")),
+  ggarrange(panelC, panelD, ncol=1, heights=c(2,1.25), labels=c("C","D")), 
+  ncol=2, widths=c(0.75,1.25), align="h"
+) #%>% ggsave(filename="../output/manuscript/plot_figure3_v2.pdf", height=5, width=8)
+
+
+```
+
+```{r}  
+###################################
+###  Run Sex-Stratified Models  ###
+###################################
+
+sex.l <- list(c("Female", "Male"))
+
+## NO significanat sex interactions in BMI-adjusted model
+summary(lm(formula(paste0("glu2hr_mgdl~taste_diplos.num*sex+", adj_models[[1]])), data=analysis))
+summary(lm(formula(paste0("glu2hr_mgdl~taste_diplos.num*sex+", adj_models[[2]])), data=analysis))
+
+
+## Sex-stratified associations with 0-2hr glucose ---------------
+
+# Categorical diplotype 
+make_pretty_lm(rbind.data.frame(make_pretty_lm(
+  print_lm(exposure = "taste_diplos", outcome="glu2hr_mgdl", 
+           covariates = gsub("[+]sex","", adj_models[[1]]), 
+           label="Female", data=analysis %>% filter(sex=="Female"))
+  ), make_pretty_lm(
+    print_lm(exposure = "taste_diplos", outcome="glu2hr_mgdl", 
+             covariates = gsub("[+]sex","", adj_models[[1]]), 
+             label="Male", data=analysis %>% filter(sex=="Male"))
+    ))) %>%
+  fwrite(paste0(taste2d_dir, "../manuscript/output/tab_sens_glu_diplocat_sexstrat_bmi.csv"))
+
+# Continuous diplotype 
+make_pretty_lm(do.call(rbind.data.frame, lapply(c("Female","Male"), function(x) {
+  print_lm(exposure = "taste_diplos.num", outcome="glu2hr_mgdl", 
+           covariates = gsub("[+]sex","", adj_models[[1]]),
+           label=paste0(x[[1]],"-BMI"), data=analysis %>% filter(sex == x))
+}))) %>% fwrite(paste0(taste2d_dir, "../manuscript/output/tab_sens_glu_diplocont_sexstrat_bmi.csv"))
+
+
+## Examine combined taster/supertaster group for females ---------------
+
+rbind.data.frame(make_pretty_lm(
+  print_lm(exposure = "taste_pav", outcome="glu2hr_mgdl", 
+           covariates = gsub("[+]sex","", adj_models[[1]]),
+           label="Female", data=analysis %>% filter(sex=="Female"))
+  ), make_pretty_lm(
+    print_lm(exposure = "taste_pav", outcome="glu2hr_mgdl", 
+             covariates = gsub("[+]sex","", adj_models[[1]]),
+             label="Male", data=analysis %>% filter(sex=="Male"))
+    )) %>%
+  fwrite(paste0(taste2d_dir, "../manuscript/output/tab_sens_glu_pav_sexstrat_bmi.csv"))
+
+## Run sex-stratified models, 
+do.call(rbind.data.frame, lapply(1:3, function(g) {
+  do.call(rbind.data.frame, lapply(sex.l, function(x) {
+    if(glycemic_vars_mgdl.l[[g]]=="glu2hr_mgdl") {
+      models.l.use<-gsub("sex","",models.sensitivity.nofast.l$Diet.Patterns) ; dat.use<-analysis %>% filter(fast_cat=="0to2hr")} else {
+      models.l.use <- gsub("sex","",models.sensitivity.l$Diet.Patterns) ; dat.use <- analysis} ; return(
+        do.call(rbind.data.frame, lapply(1:length(models.l.use), function(v) { 
+          print_lm(exposure = "taste_diplos", outcome = glycemic_vars_mgdl.l[[g]], 
+                   label.outcome = "temp" ,##paste0(x, ".", names(glycemic_vars_mgdl.l)[g]),
+                   covariates = models.l.use, label="Diet.Patterns", data=dat.use %>% 
+                     filter(sex == x), lm_trend = F) })) ) })) })) %>% 
+  write.csv(paste0("../data/processed/sens_tab_lm_allglycemic_tastediplos_sexStrat_mDiet_mgdl_",tag,".csv"), row.names = F)
+
+
+confint(lm(formula(paste0("glu2hr_mgdl~taste_diplos.num+", gsub("sex", "", models.sensitivity.nofast.l$Diet.Patterns))), data=analysis %>% filter(sex=="Female")))
+confint(lm(formula(paste0("glu2hr_mgdl~taste_diplos.num+", gsub("sex", "", models.sensitivity.nofast.l$Diet.Patterns))), data=analysis %>% filter(sex=="Male")))
+```
+
+ 
+bitter taste receptors & bitter food preference
+```{r} 
+
+bitter_prefs <- readRDS("../../diet-pgs-ses/data/processed/ukb_MA_analysis_allphenos.rda") %>%
+  select(id, pref_bitter_food, pref_sweet_food, pref_salty_food, pref_fatty_food)
+
+analysis <- analysis %>% left_join(bitter_prefs)
+
+summary(lm(formula(paste0("pref_bitter_food~taste_diplos+", models.l$Base)), data=analysis))
+summary(lm(formula(paste0("pref_bitter_food~as.factor(rs10772420_A)+", models.l$Base)), data=analysis))
+ 
+```
+

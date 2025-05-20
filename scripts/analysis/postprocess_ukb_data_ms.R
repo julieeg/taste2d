@@ -43,12 +43,13 @@ ffq_vars <- c("cooked_veg", "raw_veg", "fresh_fruit", "dried_fruit",
               "hotdrink_temp", "hotdrink_temp_hot_or_vhot_vs_warm")
 
 
+
 ################################################################################
 ## Build primary genetic exposures
 ################################################################################
 
 # ============================================
-##  compile TAS2R38 haplotypes  & diplotypes
+## Compile TAS2R38 haplotypes  & diplotypes
 # ============================================
 
 paste("Compiling supertaster haplotypes & SNP dosage")
@@ -67,7 +68,7 @@ haplos_id <- haplos_id %>%
   mutate(taster_status = factor(taster_status, levels = c("Nontaster", "Taster", "Supertaster", "Other")))
 
 
-## merge haplotype & dosage data -------------------------
+## Merge haplotype & dosage data --------------------
 
 genos_id <- haplos_id %>%
   select(c("id", ends_with("_0"), ends_with("_1"), "diplo", "taster_status")) %>%
@@ -79,7 +80,7 @@ genos_id <- haplos_id %>%
   select(-c("rs713598_C", "rs10246939_T"))
 
 
-## Clean diplotype variables ------------------------
+## Clean diplotype variables --------------------
 
 ## Recode diplotypes so palindromic heterozygotes are coded the same
 ## example: CAT/GGC AND GGC/CAT are both coded as CAT/GGC
@@ -98,13 +99,14 @@ genos_id <-  genos_id %>%
   mutate(diplos_pal=recode_diplos(diplo)) 
 
 
-## Make variable for common diplotypes -------------
+## Make variable for common diplotypes --------------------
+
 diplos_common <- which(prop.table(table(genos_id$diplos_pal))>0.001)
 genos_id <- genos_id %>% mutate(
   diplos_common = ifelse(diplos_pal %in% names(diplos_common), diplos_pal, NA))
 
 
-## Recode alleles as amino acids -----------------------
+## Recode alleles as amino acids  --------------------
 
 genos_id <- genos_id %>% 
   mutate(diplos_common_AA=gsub("CAT", "AVI", gsub("CAC", "AVV", gsub("CGT", "AAI", 
@@ -115,7 +117,9 @@ genos_id <- genos_id %>%
 
 
 ## Create variable for canonical diplotypes (AVI/AVI, AVI/PAV, PAV/PAV)
+
 taste_diplos <- c("AVI/AVI", "AVI/PAV", "PAV/PAV")
+
 genos_id <- genos_id %>%
   mutate(taste_diplos = factor(ifelse(diplos_common_AA %in% taste_diplos, diplos_common_AA, NA),
                                levels=taste_diplos)) %>%
@@ -138,11 +142,11 @@ head(genos_id)
 
 
 
-#########################################
-##  Load & compile ukb phenotype data  ## 
-#########################################
+################################################################################
+## Run post-processing for ukb phenotype data
+################################################################################
 
-paste("Compiling basic phenotypes ... ")
+paste("Post-processing of UKB phenotypes ... ")
 
 phenos_id <- phenos %>%   
 select("id", all_of(pheno_vars), all_of(gPC_vars), all_of(nutrient_vars), all_of(ffq_vars)) %>%
@@ -152,10 +156,6 @@ select("id", all_of(pheno_vars), all_of(gPC_vars), all_of(nutrient_vars), all_of
       income == "Prefer not to answer" ~ as.character(NA),
       income == "Do not know" ~ as.character(NA),
       income != "Prefer not to answer" & income != "Do not know" ~ as.character(income),
-      TRUE ~ as.character(NA)),
-    educ_level.lab = case_when(
-      educ_level.lab == "Prefer not to answer" ~ as.character(NA),
-      educ_level.lab != "Prefer not to answer" ~ as.character(educ_level.lab),
       TRUE ~ as.character(NA)),
     smoke_level.lab = case_when(
       smoke.lab == "No answer" ~ as.character(NA),
@@ -183,14 +183,6 @@ select("id", all_of(pheno_vars), all_of(gPC_vars), all_of(nutrient_vars), all_of
                                          "from_31000_to_51999", "from_52000_to_100000",  
                                          "gt_100000")),
     #Edu levels & yrs based on: https://www.nature.com/articles/s41380-019-0596-9#MOESM1)
-    educ_level.lab = factor(educ_level.lab, 
-                            levels = c("College or university degree", # ~20yrs 
-                                       "NVQ/HND or equivalent", # 2 of 3 years bachelor's degree ~19yrs
-                                       "Other professional qualifications", # e.g., nursing degree, teaching degree ~ 15yrs
-                                       "A/AS levels or equivalent", # 1 year bachelor's degree ~13yrs
-                                       "O/GCSE levels or equivalent", # HS + Associates degree ~10yrs
-                                       "CSEs or equivalent", # completed HS ~10yrs
-                                       "None of the above")), #~7yrs
     educ_isced.lab = factor(educ_isced.lab, levels=c(paste0("Level ", 1:5))),
     smoke_level.lab = factor(smoke_level.lab, levels = c("Never", "Previous", "Current")),
     alch_freq.lab = factor(alch_freq.lab, ordered = T,
@@ -223,13 +215,19 @@ select("id", all_of(pheno_vars), all_of(gPC_vars), all_of(nutrient_vars), all_of
   ) %>%
   
   #add variable for 2-hr glucoster
-  mutate(glu2hr=ifelse(fast_cat=="0to2hr",glu,NA))
+  mutate(glu2hr=ifelse(fast_cat=="0to2hr",glu,NA)) %>%
+  
+  # Add glucose in mg/dL
+  mutate(
+    glu_mgdl = glu*18.018,
+    glu2hr_mgdl = glu2hr*18.018
+  )
 
 
+  
+# Post-process FFQ vars -------------
 
-# Build diet PCs for diet patterns -------------
-
-vars_for_pca <- phenos %>% select(
+ffq_id <- phenos %>% select(
   id,
   cooked_veg_QT=cooked_veg, raw_veg_QT=raw_veg,
   fresh_fruit_QT=fresh_fruit, dried_fruit_QT=dried_fruit, 
@@ -254,47 +252,36 @@ vars_for_pca <- phenos %>% select(
   filter(complete.cases(.)==T)
 
 cat("Dimensions of dietary data \n")
-dim(vars_for_pca)
+dim(ffq_postprocess)
 
 
-## Run PCA
-diet_pcs <- prcomp(select(vars_for_pca, -id), scale.=T)  # Run PCA
-
-# compile dietPC scores
-dietPCs_id <- as.data.frame(cbind(id=vars_for_pca$id, diet_pcs$x))
-colnames(dietPCs_id) <- c("id", paste0("diet", colnames(diet_pcs$x)))
-
-# Save diet PCA results as csv (of factor loadings) & .rda (all outputs)
-saveRDS(diet_pcs, file = paste0("../data/processed/diet/ukb_", ANC, "_dietPCs.rda"))
-
-diet_id <- left_join(vars_for_pca, dietPCs_id, by = "id")
-
-#as.data.frame(diet_pcs$rotation) %>% 
-#  mutate(diet_var = gsub("_BIN", "", gsub("_QT", "", rownames(.)))) %>% 
-#  fwrite(paste0("../data/processed/diet/ukb_", ANC, "_dietPCloadings.csv"),col.names=T, row.names=F)
+print("Done compiling UKB phenotypes!")
 
 
-print("Done compiling basic phenotypes & ancestry-specific diet patterns!")
-
-
-
-###################################
-## Merge data into ukb_processed ##
-###################################
+#######################################
+#### Merge data into ukb_processed ####
+#######################################
 
 phenos_processed_id <- phenos_id %>%
   left_join(genos_id, by = "id") %>%
-  left_join(diet_id, by = "id")
+  left_join(ffq_id, by = "id")
 
+
+
+################################################################################
+## Apply exclusion criteria to create analysis dataset
+################################################################################
 
 ### Exclusion criteria
-#** No diabetes (Eastwood algorithm + HbA1c <5.7%)
-#** ANC genetic ancestry
-#** Complete data for glucose, genetic ancestry, covariates
+# - No diabetes (Eastwood algorithm + HbA1c <5.7%)
+# - EUR genetic ancestry
+# - Canonical TAS2R38 diplotype (and complete genetic data)
+# - Complete data for random glucose & covariates  
+#   - age, sex, fasting time, bmi, smoking, physical activity, alcohol, FFQ (plausible)
 #   - sensitivity: Plausible total energy intakes (600-4300 [F] or 4800 [M] kcal/d)
-#   - sensitivity: Canonical TAS2R38 diplotypes
 
-# function to identify missingness
+
+# Function to identify missingness
 find_complete_group.fun <- function(x, varname, data=phenos_processed_id) {
   return((data %>% select(c("id", all_of(x))) %>% mutate(complete = ifelse(complete.cases(.), 1, 0)))$complete) }
 
@@ -305,7 +292,6 @@ phenos_processed_id <- phenos_processed_id %>%
     n_t2d_data = recode_na_as.fun(t2d_case.f),
     n_t2d_contrl = ifelse(!is.na(t2d_case.f) & t2d_case.f == "Control", 1, 0),
     n_glu = recode_na_as.fun(glu, 0),
-    n_a1c = recode_na_as.fun(hba1c),
     n_glu_5sd = find_outliers.fun(glu, SDs=5, recode_outliers = 0),
     n_diplo_taste = ifelse(is.na(taster_status) == T | taster_status == "Other", 0, 1),
     n_diplo_005 = recode_na_as.fun(diplos_common),
@@ -314,97 +300,37 @@ phenos_processed_id <- phenos_processed_id %>%
     n_24hr = recode_na_as.fun(TCALS),
     n_24hr_plaus = recode_na_as.fun(kcal_plaus)
     ) %>%  mutate(n_covars = find_complete_group.fun(
-      c("age", "sex", paste0("gPC", 1:10), "bmi", "smoke_level.lab","physact_level",
-        "alch_freq.lab", "dietPC1"))) %>%
+      c("age", "sex", paste0("gPC", 1:10), "bmi", 
+        "smoke_level.lab","physact_level", "alch_freq.lab", "raw_veg_QT"))) %>%
   mutate(n_complete=ifelse(n_t2d_data==1 & n_geno==1 & n_glu==1 & n_fast == 1 & n_covars==1,1,0)) %>%
-  mutate(N_ancestry = ifelse(ancestry == ANC, 1, 0)) %>%
+  mutate(N_ancestry = ifelse(ancestry == "EUR", 1, 0)) %>%
   mutate(N_geno_contrl = ifelse(n_geno == 1 & n_t2d_contrl == 1, 1, 0),
          N_geno_contrl_diplo005 = ifelse(n_geno == 1 & n_t2d_contrl == 1 & n_diplo_005 == 1,1,0),
          N_geno_contrl_taste = ifelse(n_geno == 1 & n_t2d_contrl == 1 & n_diplo_taste == 1,1,0),
          N_geno_contrl_taste_compl = ifelse(n_geno == 1 & n_t2d_contrl == 1 & n_diplo_taste == 1 & n_covars==1,1,0),
-         N_geno_contrl_taste_compl_24hrplaus = ifelse(n_geno==1 & n_t2d_contrl == 1 & n_diplo_taste == 1 & n_covars==1 & n_24hr_plaus == 1,1,0)
-         )
+         N_geno_contrl_taste_compl_24hrplaus = ifelse(n_geno==1 & n_t2d_contrl == 1 & n_diplo_taste == 1 & n_covars==1 & n_24hr_plaus == 1,1,0))
 
 
 # ===============================================
-## Additional covariates for adjustment 
+## Filter out outliers for glucose levels (>5 SD)
 # ===============================================
 
-#phenos_processed_id %>% saveRDS("../data/processed/ukb_postprocessed_EUR.rda")
-
-## Added on 09-24-2024 ----------------------
-add_conf_id <- readRDS("../data/processed/ukb_conf_addn_09242024.rda")
-
-## Re-arranged on 12-27 to add new covariate vars to postprocessed data
-phenos_processed_id <- phenos_processed_id %>% 
-  left_join(add_conf_id %>% select(-alch_freq.lab), by = "id") %>% 
-  select(-physact_level.x, -pa_met_excess, -pa_met_excess_lvl) %>% rename(physact_level=physact_level.y) %>%
-  mutate(meds_bp = ifelse(sex == "Female" & meds_female.lab == "Blood pressure" | 
-                            sex == "Male" & meds_male.lab == "Blood pressure", 1, 
-                          ifelse(sex == "Female" & !is.na(meds_female.lab) | 
-                                   sex == "Male" & !is.na(meds_male.lab), 0, NA))) %>%
-  # Add Medication-adjusted BP
-  mutate(
-    sbp_adj = ifelse(meds_bp == 1, sbp+15, sbp),
-    dbp_adj = ifelse(meds_bp == 1, dbp+10, dbp)
-  ) %>%
-  mutate(glu2hr=ifelse(fast_cat=="0to2hr",glu,NA)) %>%
-  
-  # Add continuous confounders (.num)
-  mutate(
-    smoke_level.num=as.integer(descr_label.fun(., "smoke_level.lab", c("0"="Never", "1"="Former", "2"="Current"))),
-    alch_freq.num=as.integer(alch_freq.lab),
-    physact_level.num=as.integer(physact_level),
-    income_level.num=as.integer(descr_label.fun(., "income_level.lab", 
-                                                c("1"="lt_18000", "2"="from_18000_to_30999", "3"="from_31000_to_51999",
-                                                  "4"="from_52000_to_100000", "5"="gt_100000"))),
-    educ_isced.num=as.integer(descr_label.fun(., "educ_isced.lab", c("1"="Level 1", "2" = "Level 2", "3" = "Level 3", 
-                                                                     "4" = "Level 4", "5" = "Level 5")))
-  )
-
-## Add Assessment Center ----------------------------------------------------------
-ac_labs <- list("Barts"=11012, "Birmingham" = 11021, "Bristol" =	11011, "Bury" =	11008, 
-                "Cardiff" =	11003, "Cheadle (revisit)" =	11024, "Croydon" =	11020, 
-                "Edinburgh" =	11005, "Glasgow" = 11004, "Hounslow" = 11018, "Leeds" = 11010,
-                "Liverpool"=11016, "Manchester"=11001, "Middlesborough"=11017, "Newcastle" =11009, 
-                "Nottingham"=11013, "Oxford"=11002, "Reading"=11007, "Sheffield"=11014, "Stockport (pilot)"=10003,
-                "Stoke"=11006, "Swansea"=	11022,"Wrexham" =11023, "Cheadle (imaging)"=11025,
-                "Reading (imaging)"=11026, "Newcastle (imaging)" =11027, "Bristol (imaging)"=11028)
-
-phenos_processed_id <- phenos_processed_id %>% mutate(ac.f = descr_label.fun(., "ac", ac_labs))
-
-## Add glucose in mg/dL
-phenos_processed_id <- phenos_processed_id %>% mutate(
-  glu_mgdl = glu*18.018,
-  glu2hr_mgdl = glu2hr*18.018
-  )
-
-# ===============================================
-## Compile & save ukb_analysis_ANC.rda
-# ===============================================
-
-#save postprocessed data as .rda
-phenos_processed_id %>% 
-  saveRDS(paste0("../data/processed/ukb_postprocessed_EUR_20241227.rda"))
-
-
-## v6 --> filtered to EXCLUDE glucose outliers
 analysis <- phenos_processed_id %>%
   filter(n_geno==1 & n_t2d_contrl==1 & n_complete==1 & n_fast_24hr==1) %>%
-  filter(find_outliers.fun(glu)==0)
+  filter(find_outliers.fun(glu, SD=5)==0)
 
-## v7 --> apply winsorizing function over all continuous variables (to maximize sample & for consistency)
-#analysis <- phenos_processed_id %>%
-#  filter(n_geno==1 & n_t2d_contrl==1 & n_complete==1 & n_fast_24hr==1) %>%
-#  mutate_if(is.numeric, winsorize)
 
-#save as .rda
+# ===============================================
+## Compile & save ukb_analysis_EUR.rda
+# ===============================================
+
+
+#save postprocessed data as .rda
 analysis %>% 
-  saveRDS(paste0("../data/processed/ukb_analysis_", tag, "_", ANC, ".rda"))
+  saveRDS(paste0("../data/processed/ukb_analysis_vManuscript_EUR.rda"))
 
 
 cat("Done compiling ukb_analysis_ANC.rda dataset!")
 
 #EOF
-
 

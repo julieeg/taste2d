@@ -144,7 +144,7 @@ diet_vars.labs <- c(
 # ================================
 
 ## haplo_legend
-pal_haplo_legend <- 
+pal_haplo_legend <- haplo_palette
 names(pal_haplo_legend) <- paste(c("Nontaster", "Taster", "Non-canonical"), "haplotype")
 
 tab_haplos_AA <- analysis %>%
@@ -193,7 +193,7 @@ analysis <- analysis %>% mutate(
   diplos_AA = factor(ifelse(diplos_common_AA %in% diplos_gt005_AA, diplos_common_AA, NA), levels=c(diplos_gt005_AA)))
 
 ## diplo_legend
-pal_diplo_legend <- diplo_palette
+pal_diplo_legend <- paste(c("Nontaster", "Taster", "Supertaster", "Non-canonical"), "diplotype")
 names(pal_diplo_legend) <- paste(c("Nontaster", "Taster", "Supertaster", "Non-canonical"), "diplotype")
 
 ## Table
@@ -281,7 +281,7 @@ table1_pvals %>% write.csv("../output/manuscript/table1_pvalues.csv")
 ```
 
 
-##### Figure 1. Plot of estimated marginal means & replication 
+##### Figure 2. Plot of estimated marginal means & replication 
 ```{r}
 
 ## PANEL A: EMM for glucose x fasting time by DIPLOTYPE  -------------------------
