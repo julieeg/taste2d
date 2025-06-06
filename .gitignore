@@ -10,7 +10,6 @@ archive/*
 # Results and documentation
 output/*
 doc/*
-manuscript/output/*
 
 # Microsoft Office files
 *.docx
