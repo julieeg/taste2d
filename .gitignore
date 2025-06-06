@@ -4,6 +4,7 @@ output/*
 cache/*
 opt/*
 env/*
+run/*
 *.Rhistory
 
 # Results and documentation
