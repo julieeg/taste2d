@@ -324,10 +324,9 @@ analysis <- phenos_processed_id %>%
 ## Compile & save ukb_analysis_EUR.rda
 # ===============================================
 
-
 #save postprocessed data as .rda
 analysis %>% 
-  saveRDS(paste0("../data/processed/ukb_analysis_vManuscript_EUR.rda"))
+  saveRDS(paste0("../data/processed/ukb_analysis_ms.rda"))
 
 
 cat("Done compiling ukb_analysis_ANC.rda dataset!")

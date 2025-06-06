@@ -18,7 +18,6 @@ taste2d_dir <- "~/Documents/GitHub/taste2d/run/"
 lapply(list.files(paste0(taste2d_dir, "../../pantry/functions/"), full.names = T), source)
 ```
 
-
 ```{r}
 #Example markup figures: https://diabetologia-journal.org/wp-content/uploads/2023/08/Fig-mark-up-examples.pdf
 #Diabetologia Color Palette: https://diabetologia-journal.org/wp-content/uploads/2018/07/Colour-palette-for-flow-charts-and-graphs.pdf
@@ -29,10 +28,11 @@ rgb2hex <- function(r,g,b) {
   return(hex)
 }
 
-#diabetologia_palette <- c(rgb2hex(242,222,196), rgb2hex(138,169,214), rgb2hex(76,89,136), rgb2hex(181,180,180))
-main_palette <- c(palettes$NatMainBackground2$Level4[2:1], palettes$NatMainBackground2$Level2[1], "grey80")  #palettes$nature_diplos_dominant[c(1,3:5)]
+## Figure palettes
+diplo_palette <- c(palettes$NatMainBackground2$Level4[2:1], 
+                  palettes$NatMainBackground2$Level2[1], "grey80")  
+names(diplo_palette) <- paste(c("Nontaster", "Taster", "Supertaster", "Non-canonical"), "diplotype")
 snpdose_palette <- c(rgb2hex(170,196,226), rgb2hex(120,131,186), rgb2hex(96,108,158))
-
 ```
 
 ```{r}
@@ -43,6 +43,7 @@ taste_diplos_005.labs <- c(taste_diplos.labs, "AVI/AAV", "AAV/PAV")
 
 
 ## **Figure 1.** Distribution of TAS2R38 Haplotypes & Diplotypes 
+
 ```{r, error=F, message=F, fig.height==4, fig.width=6}
 # ================================
 ## Summary of Haplotypes
@@ -51,7 +52,7 @@ taste_diplos_005.labs <- c(taste_diplos.labs, "AVI/AAV", "AAV/PAV")
 tab_haplos <- readRDS(paste0(taste2d_dir, "../data/processed/manuscript/tab_descr_haplos_common.rda"))
 
 # color palette
-haplo_palette <- main_palette[c(1:2,4)]
+haplo_palette <- diplo_palette[c(1:2,4)]
 names(haplo_palette) <- paste(c("Nontaster", "Taster", "Non-canonical"), "haplotype")
 
 plot_haplos_AA <- tab_haplos %>% 
@@ -79,17 +80,13 @@ plot_haplos_AA <- tab_haplos %>%
     geom_text(aes(label=n), vjust=-0.35, size=3.0)
 
 plot_haplos_AA
-```
 
-```{r}
+
 # ================================
 ## Summary of Diplotypes
 # ================================
 
 tab_diplos <- readRDS(paste0(taste2d_dir, "../data/processed/manuscript/tab_descr_diplos_common.rda"))
-
-diplo_palette <- main_palette
-names(diplo_palette) <- paste(c("Nontaster", "Taster", "Supertaster", "Non-canonical"), "diplotype")
 
 plot_diplo_AA <- tab_diplos %>%
   ggplot(aes(x=diplos_AA_order, y=pct*100, fill=diplo_legend)) + 
@@ -113,9 +110,8 @@ plot_diplo_AA <- tab_diplos %>%
           
           ) +  # Optional: Add background
   geom_text(aes(label=n), vjust=-0.35, size=3.0) ; plot_diplo_AA
-```
 
-```{r}
+
 # =================================================
 # Panel plot of TAS2R38 haplotypes & diplotypes 
 # =================================================
@@ -129,13 +125,13 @@ plot_haplo_diplo_AA %>% ggsave(filename=paste0(taste2d_dir, "../manuscript/outpu
 ```
 
 
-## Table 1. Descriptive characteristics 
+## **Table 1.** Descriptive characteristics 
 ```{r, include=T}
 table1 <- read.csv(paste0(taste2d_dir, "../data/processed/manuscript/tab_descr_basic_diplo_taste.csv"))
 table1 %>% kable(caption="Descriptive Table 1")
 ```
 
-##### Table 2. Primary associations of TAS2R38 diplotype with random and 0-2hr glucose
+##### **Table 2.** Primary associations of TAS2R38 diplotype with random and 0-2hr glucose
 ```{r}
 # Categorical diplotype
 tab_glu_diplocat <- rbind.data.frame(
@@ -158,14 +154,14 @@ rbind.data.frame(tab_glu_diplocat, tab_glu_diplocont) %>%
   fwrite(paste0(taste2d_dir, "../manuscript/output/tab_res_glu_diplo_basebmi_print.csv"))
 ```
 
-##### Supplementary Table: Associations of TAS2R38 diplotype with glucose levels at subsequent fasting windows
+##### **Supplementary Table.** Associations of TAS2R38 diplotype with glucose levels at subsequent fasting windows
 ```{r}
 tab_gluXfast_diplocat <- make_pretty_lm(
-  fread(paste0(taste2d_dir, outDir, "/tab_res_gluXfast_diplocat_basebmi.csv"))) %>%
+  fread(paste0(taste2d_dir, "../data/processed/manuscript/tab_res_gluXfast_diplocat_basebmi.csv"))) %>%
   filter(Model == "BMI")
 
 tab_gluXfast_diplocont <- make_pretty_lm(
-  fread(paste0(taste2d_dir, outDir, "/tab_res_gluXfast_diplocont_basebmi.csv"))) %>%
+  fread(paste0(taste2d_dir, "../data/processed/manuscript/tab_res_gluXfast_diplocont_basebmi.csv"))) %>%
   filter(Model == "BMI") %>%
   mutate(P_f.test = "-", P_trend.test = "-")
 
@@ -176,11 +172,10 @@ rbind.data.frame(tab_gluXfast_diplocat, tab_gluXfast_diplocont) %>%
 
 ```
 
-Figure 2: Panel plot of primary associations of TAS2R38 with glucose homeostasis & replication
+**Figure 2.** Panel plot of primary associations of TAS2R38 with glucose homeostasis & replication
+
 ```{r}
-
 ## Set ggtheme for Figure 2 --------------------
-
 fig2_ggtheme <- theme(
   axis.title.x = element_text(size=8, face="bold", vjust=3), 
   axis.title.y = element_text(size=8, face="bold", vjust=-2), 
@@ -203,14 +198,8 @@ fig2_ggtheme <- theme(
   legend.key.size = unit(0.65, 'line'),
   legend.margin = margin(2,2,2,2, unit="pt"),
   plot.margin=margin(1,4,1,1, unit="line")
-)
+) 
 
-
-diplo_palette <- main_palette#taste_palette
-```
-
-
-```{r}
 # ===========================================================
 ## Panel A: EMM glucose by TAS2R38 at each fasting interval 
 # ===========================================================
@@ -243,9 +232,8 @@ panelA <- emm_glu_mgdl_bmi %>%
   ylab("Glucose level (mg/dL)\n") + xlab("Self-reported fasting window (hr)") + 
   theme_bw() + 
   fig2_ggtheme; panelA
-```
 
-```{r}
+
 # ==============================================
 ## Panel B: EMM 0-2 hr glucose by TAS2R38 SNP
 # ==============================================
@@ -256,7 +244,6 @@ emm_tas2r38snps_glu2hr <- read.csv(paste0(taste2d_dir, outDir, "/tab_sens_emm_gl
 tas2r38_snps_cat <- paste0(tas2r38_snps, ".cat")
 snps_fancy <- c("rs713598 (C>G)", "rs1726866 (G>A)", "rs10246939 (T>C)")
 snps_fancy_2row <- c("rs713598\n(C>G)", "rs1726866\n(G>A)", "rs10246939\n(T>C)")
-
 
 panelB <- emm_tas2r38snps_glu2hr %>% 
   as.data.frame() %>%
@@ -290,9 +277,8 @@ panelB <- emm_tas2r38snps_glu2hr %>%
         plot.margin=margin(1,1,1.25,3,unit="line"),
         plot.title=element_text(size=8, hjust=0.5, margin=margin(b=1)) 
     ) ; panelB
-```
 
-```{r}
+
 # ==============================================================================
 ## Panel C: Variant-level associations (cont) with 0-2hr glucose in UKB & MAGIC
 # ==============================================================================
@@ -300,7 +286,6 @@ panelB <- emm_tas2r38snps_glu2hr %>%
 # Set palettes and plot themes ----------------
 
 study_palette <- c(UKBB=as.vector(diplo_palette)[3], MAGIC=rgb2hex(192,65,64))
-snpplot_theme <- 
 
 # Load in data --------------------
 
@@ -365,9 +350,7 @@ panelC <- snps_glu_bmi_combn %>%
     plot.margin=margin(1,1,1,1,unit="line"),
     plot.title=element_text(size=8, hjust=0.5, margin=margin(b=1))
     ) ; panelC
-```
 
-```{r}
 # ==================
 ## Combine panels
 # ==================
@@ -378,37 +361,12 @@ Fig2_allpanels
 #Fig2_allpanels %>% ggsave(filename=paste0(taste2d_dir, "../manuscript/output/fig_res_glu_diplo_tas2r38_panel_v2.pdf"), height=5, width=7)
 ```
 
-Variant-level associations 
-```{r}
-# Categorical diplotype
-tab_glu_diplocat <- rbind.data.frame(
-  make_pretty_lm(fread(paste0(taste2d_dir,"../data/processed/manuscript/tab_res_rg_diplocat_basebmi.csv"))), 
-  make_pretty_lm(fread(paste0(taste2d_dir,"../data/processed/manuscript/tab_res_2hg_diplocat_basebmi.csv"))) 
-  ) #%>% fwrite(paste0(taste2d_dir,"../manuscript/output/tab_res_glu_diplocat_basebmi.csv"))
-
-# Continuous diplotype
-tab_glu_diplocont <- rbind.data.frame(
-  make_pretty_lm(fread(paste0(taste2d_dir,"../data/processed/manuscript/tab_res_rg_diplocont_basebmi.csv"))), 
-  make_pretty_lm(fread(paste0(taste2d_dir,"../data/processed/manuscript/tab_res_2hg_diplocont_basebmi.csv"))) 
-  ) %>% mutate(P_f.test = "-", P_trend.test = "-") #%>% fwrite(paste0(taste2d_dir,"../manuscript/output/tab_res_glu_diplocat_basebmi.csv"))
-
-tas2r38_lvls <- c("TAS2R38 diplotype, per PAV haplotype", "AVI/AVI","AVI/PAV","PAV/PAV")
-
-rbind.data.frame(tab_glu_diplocat, tab_glu_diplocont) %>%
-  mutate_at("Exposure", ~factor(gsub("taste_diplos.num", "TAS2R38 diplotype, per PAV haplotype", .),levels=tas2r38_lvls)) %>%
-  mutate_at("Outcome",~factor(., levels=c("Glucose (mg/dL)", "0-2hr Glucose (mg/dL)"))) %>%
-  arrange(Outcome, desc(Model), Exposure) %>%
-  fwrite(paste0(taste2d_dir, "../manuscript/output/tab_res_glu_diplo_basebmi_print.csv"))
-```
-
-
 
 ##### Supplementary Figure: Dot plot for TAS2R38 & waterfall for glucose significance
 ```{r}
 # ===========================================================
 ## Panel A: TAS2R38 associations with behavioral covariates
 # ===========================================================
-
 
 panelA.supp <-  fread(paste0(taste2d_dir, outDir, "/tab_sens_behavcovars_diplo_bmi.csv"))  %>%
   arrange(beta) %>%
@@ -492,10 +450,9 @@ ggarrange(panelA.supp, "", panelB.supp, widths=c(1.65, 0.05, 1.15),nrow=1,
 ```
 
 
-### Figure 3. Plot of sensitivity analysis, adjusting for dietary and lifestyle habits
+#### **Figure 3.** Plot of behaviorally-independent associations, adjusting for dietary and lifestyle habits
 ```{r}
 ## Set ggthemes for Figure 3 --------------------
-
 fig3_theme <- theme(
   panel.grid.minor = element_blank(),
   panel.grid.major.y = element_blank(),
@@ -516,9 +473,7 @@ fig3_legend <- theme(
   legend.key.size = unit(0.55, 'line'),
   legend.margin = margin(3,3,3,3, unit="pt")
 )
-```
 
-```{r}
 # ================================================
 ## Panel A/B: LRT P-values for covariate quality
 # ================================================
@@ -528,11 +483,16 @@ covar_qual <- left_join(
   fread(paste0(taste2d_dir, outDir, "/tab_res_behav_covars_bmi.csv")),
   by="Model")
 
+## Carried over from run_primary_ms
+adj_models <- c("BMI Model\n(Primary)", "Lifestyle\nAdjusted", 
+                "Diet\nAdjusted", "Lifestyle+Diet\nAdjusted")
+
 panelA <- covar_qual %>%
-  mutate(diffR2 = (baseR2-r2_diet_diplo$baseR2[1])*100) %>%
-  mutate(LRT = c(0.1, -log10(lrt_diet_diplo$pLRT))) %>%
+  mutate(diffR2 = (baseR2-baseR2[1])*100) %>%
+  mutate(LRT = -log10(pLRT)) %>%
+  mutate(LRT = ifelse(is.na(LRT), 0.1, LRT)) %>%
   select(Model, LRT) %>%
-  mutate(Model=factor(Model, levels=rev(c(names(adj_models))))) %>%
+  mutate(Model=factor(Model, levels=rev(c(adj_models)))) %>%
   ggplot(aes(y=Model, x=LRT)) + 
   geom_bar(stat="identity", width=0.6,fill= "grey") + 
   xlab("-log10(P) for LRT (vs BMI Model)") + ylab("") +
@@ -549,7 +509,7 @@ panelA <- covar_qual %>%
 
 panelB <- covar_qual  %>% 
   mutate(lowCI=beta-1.96*se, upCI=beta+1.96*se) %>%
-  mutate(Model=factor(Model, levels=rev(c(names(adj_models))))) %>%
+  mutate(Model=factor(Model, levels=rev(c(adj_models)))) %>%
   ggplot(aes(y=Model, x=beta, xmin=lowCI, xmax=upCI)) + 
   geom_errorbarh(height=0.25, linewidth=0.55, color=diplo_palette[2]) + 
   geom_point(size=2, color=diplo_palette[2]) + 
@@ -571,29 +531,32 @@ panelAB <- ggarrange(panelA, panelB, ncol=1, align="v")
 ## traits that are associated with 0-2 hr Glucose
 # ======================================================================
 
+# Negative control bitter SNPs
+bitter_snps <- c("rs713598_G", "rs1726866_G", "rs10246939_C", "rs10772420_A", "rs2597979_G")
+bitter_snps.labs <- c(rep("_TAS2R38_ Diplotype",3), "_TAS2R14_ Negative Control", "_TAS2R19_ Negative Control")
+names(bitter_snps.labs) <- bitter_snps
+
+# diet/lifestyle covariates associated with 0-2 hr glucose
 behav_covars_sel <- c("tea_QT", "coffee_QT", "addsalt_3lvl.lab", "alch_freq.lab", "cereal_intake_QT", 
                       "spread_type_butter_vs_any_other_BIN", "bread_type_white_vs_brown_or_whole_BIN", 
                       "fresh_fruit_QT", "procmeat_QT")
+behav_covars.labs <- readRDS(paste0(taste2d_dir, "../data/processed/manuscript/behav_covars_labs.rda"))
 
-
+# Read in associations
 negcntrl_behav <- fread(paste0(taste2d_dir, outDir, "/tab_sens_dietlife_negcntrl_snps_bmi.csv")) %>%
   rename(SNP=exposure, behav=outcome) %>%
   filter(behav %in% behav_covars_sel)
 
 # set color palette
-negcontrl_palette <- c(rs10772420_A=rgb2hex(109,165,103), rs2597979_G=rgb2hex(193,121,99),
-                       rs713598_G=diplo_palette[[2]], rs1726866_G=diplo_palette[[2]], 
-                       rs10246939_C=diplo_palette[[2]])
-
 negcontrl_palette <- c(diplo_palette[[2]],rgb2hex(109,165,103), rgb2hex(193,121,99))
-names(negcontrl_palette) <- snp_labels[c(1,4:5)]
+names(negcontrl_palette) <- bitter_snps.labs[c(1,4:5)]
 
 panelC <- negcntrl_behav %>%
   mutate(snp=factor(SNP, levels=rev(bitter_snps))) %>%
   mutate(behav=behav_covars.labs[behav]) %>% 
   mutate(behav=ifelse(behav=="addsalt_3lvl.lab", "Frequency of adding\nsalt to food",
                       ifelse(behav=="alch_freq.lab", "Alcohol use frequency", behav))) %>%
-  mutate(snp_label = factor(snp, levels=bitter_snps, labels=snp_labels)) %>%
+  mutate(snp_label = factor(snp, levels=bitter_snps, labels=bitter_snps.labs)) %>%
   filter(behav != "Frequency of adding\nsalt to food") %>%
   mutate(behav = factor(behav, levels=rev(unique(behav[order(p)])))) %>%  
   ggplot(aes(x=-log10(p), y=behav, fill=snp_label, group=snp)) + 
@@ -616,35 +579,33 @@ panelC <- negcntrl_behav %>%
 ## 0-2hr glucose, before and after adjusting for diet/lifestyle
 # ======================================================================
 
-## EMM in the fully-adjusted model
-emm_bittersnps_glu2hr <- do.call(rbind.data.frame, lapply(bitter_snps_cat, function(snp) {
-  do.call(rbind.data.frame, lapply(1:length(adj_models), function(m) {
-    get_emm.fun(exposure = snp, outcome = "glu2hr_mgdl", covars = adj_models[[m]], 
-                reference = "0_0", data=analysis)$emm })) %>%
-    mutate(Model = names(adj_models)[m])
-     })) ; emm_bittersnps_glu2hr <- emm_bittersnps_glu2hr %>% mutate(
-  Model = rep(rep(names(adj_models), each=3),length(bitter_snps_cat))
-)
+bitter_snps_cat <- paste0(bitter_snps, ".cat")
 
+# Lod in data
+emm_snps_glu2hr <- fread(paste0(taste2d_dir, "../data/processed/manuscript/tab_sens_emm_glu_negcntrl_snps.csv"))
 emm_snps_glu <- emm_bittersnps_glu2hr %>% 
   mutate(model=Model) %>%
   filter(Model=="Lifestyle+Diet")
 
+
+## Build color palettes for negative control variant dose
 negcontl_dose_palette <- c(TAS2R38_0=diplo_palette[[1]], TAS2R38_1=diplo_palette[[2]], TAS2R38_2=diplo_palette[[3]],
                            TAS2R14_0=rgb2hex(152,201,139), TAS2R14_1=rgb2hex(109,165,103), TAS2R14_2=rgb2hex(99,122,98),
                            TAS2R9_0=rgb2hex(214,159,151), TAS2R9_1=rgb2hex(193,121,99), TAS2R9_2=rgb2hex(150,102,90))
+
 legend_dose <- data.frame(
   Label = c("0 alleles", "1 allele", "2 alleles"),
   Color = c("#CCCCCC", "#7F7F7F", "#000000"),
   x = 1, y = 1
 )
 
+# Create plot labels
 label = c("Line 1<br><i>Group A</i>", "Line 1<br><i>Group B</i>")
-
 gene_labels <- c(paste0("<i>TAS2R38</i><br>(", bitter_snps[1:3], ")"), 
                  "<i>TAS2R14</i><br>(rs10772420_A)", "<i>TAS2R19</i><br>(rs2597979_G)")
 names(gene_labels) <- bitter_snps 
 gene_labels_lineheight <- paste0("<span style='line-height:1.5'>", gene_labels) ; names(gene_labels_lineheight)<-gene_labels
+
 
 panelD <- emm_snps_glu %>%
   mutate(across(c(emmean, SE, lowCI, upCI), ~as.numeric(.))) %>%
@@ -692,94 +653,17 @@ panelD <- emm_snps_glu %>%
     legend.background = element_rect(fill = "white", color = "black", linewidth=0.15), 
     ) ; panelD
 
-```
 
-```{r}
+# ==================
+## Build panel 
+# ==================
+
 ggarrange(
   ggarrange(panelA, panelB, ncol=1, align="v", labels=c("A","B")),
   ggarrange(panelC, panelD, ncol=1, heights=c(2,1.25), labels=c("C","D")), 
   ncol=2, widths=c(0.75,1.25), align="h"
 ) #%>% ggsave(filename="../output/manuscript/plot_figure3_v2.pdf", height=5, width=8)
-
-
 ```
 
-```{r}  
-###################################
-###  Run Sex-Stratified Models  ###
-###################################
 
-sex.l <- list(c("Female", "Male"))
-
-## NO significanat sex interactions in BMI-adjusted model
-summary(lm(formula(paste0("glu2hr_mgdl~taste_diplos.num*sex+", adj_models[[1]])), data=analysis))
-summary(lm(formula(paste0("glu2hr_mgdl~taste_diplos.num*sex+", adj_models[[2]])), data=analysis))
-
-
-## Sex-stratified associations with 0-2hr glucose ---------------
-
-# Categorical diplotype 
-make_pretty_lm(rbind.data.frame(make_pretty_lm(
-  print_lm(exposure = "taste_diplos", outcome="glu2hr_mgdl", 
-           covariates = gsub("[+]sex","", adj_models[[1]]), 
-           label="Female", data=analysis %>% filter(sex=="Female"))
-  ), make_pretty_lm(
-    print_lm(exposure = "taste_diplos", outcome="glu2hr_mgdl", 
-             covariates = gsub("[+]sex","", adj_models[[1]]), 
-             label="Male", data=analysis %>% filter(sex=="Male"))
-    ))) %>%
-  fwrite(paste0(taste2d_dir, "../manuscript/output/tab_sens_glu_diplocat_sexstrat_bmi.csv"))
-
-# Continuous diplotype 
-make_pretty_lm(do.call(rbind.data.frame, lapply(c("Female","Male"), function(x) {
-  print_lm(exposure = "taste_diplos.num", outcome="glu2hr_mgdl", 
-           covariates = gsub("[+]sex","", adj_models[[1]]),
-           label=paste0(x[[1]],"-BMI"), data=analysis %>% filter(sex == x))
-}))) %>% fwrite(paste0(taste2d_dir, "../manuscript/output/tab_sens_glu_diplocont_sexstrat_bmi.csv"))
-
-
-## Examine combined taster/supertaster group for females ---------------
-
-rbind.data.frame(make_pretty_lm(
-  print_lm(exposure = "taste_pav", outcome="glu2hr_mgdl", 
-           covariates = gsub("[+]sex","", adj_models[[1]]),
-           label="Female", data=analysis %>% filter(sex=="Female"))
-  ), make_pretty_lm(
-    print_lm(exposure = "taste_pav", outcome="glu2hr_mgdl", 
-             covariates = gsub("[+]sex","", adj_models[[1]]),
-             label="Male", data=analysis %>% filter(sex=="Male"))
-    )) %>%
-  fwrite(paste0(taste2d_dir, "../manuscript/output/tab_sens_glu_pav_sexstrat_bmi.csv"))
-
-## Run sex-stratified models, 
-do.call(rbind.data.frame, lapply(1:3, function(g) {
-  do.call(rbind.data.frame, lapply(sex.l, function(x) {
-    if(glycemic_vars_mgdl.l[[g]]=="glu2hr_mgdl") {
-      models.l.use<-gsub("sex","",models.sensitivity.nofast.l$Diet.Patterns) ; dat.use<-analysis %>% filter(fast_cat=="0to2hr")} else {
-      models.l.use <- gsub("sex","",models.sensitivity.l$Diet.Patterns) ; dat.use <- analysis} ; return(
-        do.call(rbind.data.frame, lapply(1:length(models.l.use), function(v) { 
-          print_lm(exposure = "taste_diplos", outcome = glycemic_vars_mgdl.l[[g]], 
-                   label.outcome = "temp" ,##paste0(x, ".", names(glycemic_vars_mgdl.l)[g]),
-                   covariates = models.l.use, label="Diet.Patterns", data=dat.use %>% 
-                     filter(sex == x), lm_trend = F) })) ) })) })) %>% 
-  write.csv(paste0("../data/processed/sens_tab_lm_allglycemic_tastediplos_sexStrat_mDiet_mgdl_",tag,".csv"), row.names = F)
-
-
-confint(lm(formula(paste0("glu2hr_mgdl~taste_diplos.num+", gsub("sex", "", models.sensitivity.nofast.l$Diet.Patterns))), data=analysis %>% filter(sex=="Female")))
-confint(lm(formula(paste0("glu2hr_mgdl~taste_diplos.num+", gsub("sex", "", models.sensitivity.nofast.l$Diet.Patterns))), data=analysis %>% filter(sex=="Male")))
-```
-
- 
-bitter taste receptors & bitter food preference
-```{r} 
-
-bitter_prefs <- readRDS("../../diet-pgs-ses/data/processed/ukb_MA_analysis_allphenos.rda") %>%
-  select(id, pref_bitter_food, pref_sweet_food, pref_salty_food, pref_fatty_food)
-
-analysis <- analysis %>% left_join(bitter_prefs)
-
-summary(lm(formula(paste0("pref_bitter_food~taste_diplos+", models.l$Base)), data=analysis))
-summary(lm(formula(paste0("pref_bitter_food~as.factor(rs10772420_A)+", models.l$Base)), data=analysis))
- 
-```
-
+##EOF

@@ -22,7 +22,11 @@ invisible(lapply(list.files("../../pantry/functions/", full.names = T), function
 
 
 ## load analysis dataframe
-analysis <- readRDS(paste0("../data/processed/ukb_analysis_vManuscript_EUR.rda"))
+analysis <- readRDS(paste0("../data/processed/ukb_analysis_ms.rda")) %>%
+  mutate(
+    glu_mgdl = glu*18.018,
+    glu2hr_mgdl = glu2hr*18.018
+  )
 
 dim(analysis)  # N=241378
 
@@ -174,6 +178,7 @@ print_summary_table(data=analysis, vars_to_summarize = glucose_vars_mgdl,
   write.csv(paste0(outDir, "/tab_descr_glu_diplo_sexageac.csv"))
 
 
+
 ################################################################################
 ## Primary Analysis of glucose homeostasis by TAS2R38 diplotype
 ## Base and BMI-adjusted models
@@ -319,6 +324,7 @@ make_pretty_lm(print_lm(exposure="taste_diplos.num", outcome="glu_mgdl", covaria
 
 #  Outcome            Model         Exposure      N              Beta_95CI P_t.test
 # glu_mgdl Glucose, >= 3 hr taste_diplos.num 161036 -0.016 (-0.079, 0.048)    0.629
+
 
 
 ###############################
@@ -470,7 +476,9 @@ behav_covars.labs <- c(
   alch_daily_rarelynever_BIN = "Daily (vs rarely/never) drink alcohol",
   alch_weekly_rarelynever_BIN = "Weekly (vs rarely/never) drink alcohol",
   alch_monthly_rarelynever_BIN = "Monthly (vs rarely/never) drink alcohol"
-)
+) ; behav_covars.labs %>% saveRDS(paste0(outDir, "/behav_covars_labs.rda"))
+
+
 
 diet_vars <- c("raw_veg_QT", "cooked_veg_QT", "fresh_fruit_QT", "dried_fruit_QT", 
                "oily_fish_QT", "nonoily_fish_QT", "procmeat_QT", "poultry_QT", 
@@ -550,16 +558,10 @@ do.call(rbind.data.frame, lapply(1:length(adj_models), function(m) {
 ## Negative Control Experiments
 ################################################################################
 
-# =============================================================================
-## Associations of negative control variants with diet/lifestyle covariates
-# =============================================================================
-
-do.call(rbind.data.frame, lapply(bitter_snps, function(snp) {
-  do.call(rbind.data.frame, lapply(1:length(behav_covars.labs), function(d) {
-    print_lm(exposure=snp, outcome=names(behav_covars.labs)[d],
-             covariates = models.nofast.l$BMI, label=behav_covars.labs[d]) }))
-  })) %>% fwrite(paste0(outDir, "/tab_sens_dietlife_negcntrl_snps_bmi.csv"))
-
+behav_covars_sel <- c("tea_QT", "coffee_QT", "addsalt_3lvl.lab", "alch_freq.lab",
+                      "cereal_intake_QT", "spread_type_butter_vs_any_other_BIN", 
+                      "bread_type_white_vs_brown_or_whole_BIN", "fresh_fruit_QT", 
+                      "procmeat_QT")
 
 # =============================================================
 ## Load & prepare additional bitter taste receptor variants
@@ -576,17 +578,12 @@ bitter_snps <- c("rs713598_G", "rs1726866_G", "rs10246939_C", "rs10772420_A", "r
 analysis <- analysis %>% mutate(rs10772420_A = 2-rs10772420_G)
 
 
+# =============================================================================
+## Associations of negative control variants with diet/lifestyle covariates
+# =============================================================================
 
-
-
-
-
-
-
-
-
-## P-values for unadjusted P-trend tests (with continuous variants) 
-negcontrol_pvals <- do.call(rbind.data.frame, lapply(bitter_snps, function(snp) {
+## Unadjusted P-trend tests (for Figure)
+do.call(rbind.data.frame, lapply(bitter_snps, function(snp) {
   do.call(rbind.data.frame, lapply(1:length(bitter_foods), function(v) {
     dat <- analysis %>% select(SNP=snp, var=bitter_foods[v])
     if(is.numeric(dat$var) ==T) {
@@ -595,13 +592,104 @@ negcontrol_pvals <- do.call(rbind.data.frame, lapply(bitter_snps, function(snp) 
       cbind.data.frame(Var=bitter_foods[[v]], Pvalue=chisq.test(dat$SNP, dat$var)$p.value)
     }
   })) %>% mutate(P_formatted = format_p.fun(Pvalue)) %>% mutate(SNP=snp)
-}))
+  }))  %>% fwrite(paste0(outDir, "tab_sens_dietlife_negcntrl_snps_unadj.csv"))
 
 
-negcontrl_palette <- c(diplo_palette[[2]],rgb2hex(109,165,103), rgb2hex(193,121,99))
-names(negcontrl_palette) <- snp_labels[c(1,4:5)]
+## BMI-adjusted models (for sensitivity)
+do.call(rbind.data.frame, lapply(bitter_snps, function(snp) {
+  do.call(rbind.data.frame, lapply(1:length(behav_covars.labs), function(d) {
+    print_lm(exposure=snp, outcome=names(behav_covars.labs)[d],
+             covariates = models.nofast.l$BMI, label=behav_covars.labs[d]) }))
+  })) %>% fwrite(paste0(outDir, "/tab_sens_dietlife_negcntrl_snps_bmi.csv"))
 
-p
+
+
+# ======================================================================
+## Associations of TAS2R38 and Negative Control variants with 0-2hr glucose, 
+## before and after adjusting for diet/lifestyle
+# ======================================================================
+
+## EMM in the fully-adjusted model
+emm_bittersnps_glu2hr <- do.call(rbind.data.frame, lapply(bitter_snps_cat, function(snp) {
+  do.call(rbind.data.frame, lapply(1:length(adj_models), function(m) {
+    get_emm.fun(exposure = snp, outcome = "glu2hr_mgdl", covars = adj_models[[m]], 
+                reference = "0_0", data=analysis, set.rg.limit = 900000)$emm })) %>%
+    mutate(Model = adj_models[m])
+})) ; emm_bittersnps_glu2hr <- emm_bittersnps_glu2hr %>% mutate(
+  Model = rep(rep(adj_models, each=3), length(bitter_snps_cat))
+) %>% fwrite(paste0(outDir, "/tab_sens_emm_glu_negcntrl_snps.csv"))
+
+## Double check required rg.limit
+
+################################################################################
+## Sex-stratified exploratory analyses
+################################################################################
+
+sex.l <- list(c("Female", "Male"))
+
+
+## NO significanat sex interactions
+summary(lm(formula(paste0("glu2hr_mgdl~taste_diplos.num*sex+", adj_models[[1]])), data=analysis))
+summary(lm(formula(paste0("glu2hr_mgdl~taste_diplos.num*sex+", adj_models[[4]])), data=analysis))
+
+
+## Sex-stratified associations with 0-2hr glucose ------------------
+# BMI model
+print_lm(exposure = "taste_diplos", outcome="glu2hr_mgdl", covariates = gsub("[+]sex","", adj_models[[1]]),
+         label="Female", data=analysis %>% filter(sex=="Female"))
+print_lm(exposure = "taste_diplos", outcome="glu2hr_mgdl", covariates = gsub("[+]sex","", adj_models[[1]]),
+         label="Male", data=analysis %>% filter(sex=="Male"))
+
+# Diet+Lifestyle adjusted model ------------------
+
+print_lm(exposure = "taste_diplos", outcome="glu2hr_mgdl", covariates = gsub("[+]sex","", adj_models[[4]]),
+         label="Female", data=analysis %>% filter(sex=="Female"))
+print_lm(exposure = "taste_diplos", outcome="glu2hr_mgdl", covariates = gsub("[+]sex","", adj_models[[4]]),
+         label="Female", data=analysis %>% filter(sex=="Male"))
+
+
+# ======================================================================
+## Re-code TAS2R38 as PAV carriers to re-test association in females
+# ======================================================================
+
+analysis <- analysis %>% mutate(
+  diplo_pav = factor(case_when(taste_diplos == "PAV/PAV" | taste_diplos == "AVI/PAV" ~ "PAV Carrier", 
+                               taste_diplos == "AVI/AVI" ~ "AVI/AVI",
+                               TRUE ~ as.character(NA)
+  ), levels = c("AVI/AVI", "PAV Carrier")))
+
+
+# BMI model ------------------
+
+make_pretty_lm(print_lm(exposure = "diplo_pav", outcome="glu2hr_mgdl", covariates = gsub("[+]sex","", adj_models[[1]]),
+         label="Female", data=analysis %>% filter(sex=="Female")))
+anova(lm(formula(paste0("glu2hr_mgdl~diplo_pav+", gsub("[+]sex", "", adj_models[[1]]))), data=analysis %>% filter(sex=="Female")))
+
+make_pretty_lm(print_lm(exposure = "diplo_pav", outcome="glu2hr_mgdl", covariates = gsub("[+]sex","", adj_models[[1]]),
+         label="Male", data=analysis %>% filter(sex=="Male")))
+
+
+## Compare r2 for additive vs. dominant model ----------
+
+# Additive (numeric)
+summary(lm(glu2hr_mgdl~taste_diplos.num, data=analysis %>% filter(sex=="Female")))
+  # R2: 4.059e-05 ; Adj R2: 8.635e-06  ; F-statistic:  1.27; p-value: 0.2597
+
+summary(lm(formula(paste0("glu2hr_mgdl~taste_diplos.num+", gsub("[+]sex","", adj_models[[1]]) )), 
+           data=analysis %>% filter(sex=="Female"))) 
+  # Multiple R-squared:  0.05994,	Adjusted R-squared:  0.05895 
+  # F-statistic: 60.41 on 33 and 31262 DF,  p-value: < 2.2e-16
+
+
+# Dominant (PAV carriers vs AVI/AVI)
+summary(lm(glu2hr_mgdl~diplo_pav, data=analysis %>% filter(sex=="Female")))
+  # R2: 7.446e-05,	Adj R2: 4.251e-05 ; F-statistic: 2.33 ; p-value: 0.1269
+
+summary(lm(formula(paste0("glu2hr_mgdl~diplo_pav+", gsub("[+]sex","", adj_models[[1]]) )), 
+           data=analysis %>% filter(sex=="Female"))) 
+  # R2: 7.446e-05,	Adj R2: 4.251e-05 ; F-statistic: 2.33 ; p-value: 0.1269
+
+
 ##EOF
 
 
