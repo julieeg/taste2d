@@ -1,5 +1,0 @@
-Outcome,Model,Exposure,N,Beta_95CI,P_t.test,P_f.test,P_trend.test
-glu2hr_mgdl,Female,AVI/AVI,13848,-,-,0.053,0.062
-glu2hr_mgdl,Female,PAV carrier,20651,"-0.27 (-0.554, 0.013)",0.062,-,-
-glu2hr_mgdl,Male,AVI/AVI,11616,-,-,0.101,0.088
-glu2hr_mgdl,Male,PAV carrier,17512,"-0.263 (-0.566, 0.039)",0.088,-,-

@@ -1,3 +1,0 @@
-Outcome,Model,Exposure,N,Beta_95CI,P_t.test
-glu2hr_mgdl,Female-BMI,taste_diplos.num,31296,"-0.138 (-0.348, 0.071)",0.197
-glu2hr_mgdl,Male-BMI,taste_diplos.num,26356,"-0.337 (-0.56, -0.114)",0.003
