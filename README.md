@@ -1,3 +1,1 @@
 README for Taste2D
-
-TBD ...
