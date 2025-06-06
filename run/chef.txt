@@ -83,4 +83,9 @@ Example: for IID=X*****X, haplo_0=GGC, haplo_1=CAT, diplo=GGC/CAT, taster_status
 	7 141672604 rs10246939 C T 0|1
 	7 141672705 rs1726866 A G 1|0
 	7 141673345 rs713598 G C 0|1
+	
+	
+## EOF
+
+
 
