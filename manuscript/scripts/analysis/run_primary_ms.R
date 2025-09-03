@@ -22,10 +22,15 @@ invisible(lapply(list.files("../../pantry/functions/", full.names = T), function
 
 
 ## load analysis dataframe
-analysis <- readRDS(paste0("../data/processed/ukb_analysis_ms.rda")) %>%
+analysis <- readRDS(paste0("../archive/data/processed/ukb_analysis_ms.rda")) %>%
   mutate(
     glu_mgdl = glu*18.018,
-    glu2hr_mgdl = glu2hr*18.018
+    glu2hr_mgdl = glu2hr*18.018) %>%
+  # Add LDL, HDL and TG in mg/dL
+  mutate(
+    ldl_fasting_gt6_mgdl = ifelse(fasting_hrs >= 6, ldl*38.67, NA),
+    hdl_fasting_gt6_mgdl = ifelse(fasting_hrs >= 6, hdl*38.67, NA),
+    tg_fasting_gt6_mgdl = ifelse(fasting_hrs >= 6, tg*88.57, NA)
   )
 
 dim(analysis)  # N=241378
@@ -48,11 +53,10 @@ outDir=paste0("../data/processed/manuscript")
 ################################################################################
 
 # ============================================
-## Distributions of haplotyeps & diplotypes 
+## Distributions of haplotypes & diplotypes 
 # ============================================
 
 ## Haplotypes
-
 analysis %>%
   select(id, haplo_0_aa, haplo_1_aa) %>%
   pivot_longer(-id, values_to="haplo") %>%
@@ -67,7 +71,6 @@ analysis %>%
 
 
 ## Diplotypes --------------
-
 diplos_gt005 <- names(which(prop.table(table(analysis$diplos_common_AA))>0.005))
 analysis <- analysis %>% mutate(
   diplos_AA = factor(ifelse(diplos_common_AA %in% diplos_gt005, diplos_common_AA, NA), levels=c(diplos_gt005)))
@@ -104,9 +107,10 @@ vars_to_summarize <- c(
   alch_freq.lab="Alcohol Frequency", alch_1to4d.lab="Alcohol Frequency, 1-4 per week",
   alch_drinker_status.lab = "Alcohol Drinker", #alch_heavydrinker = "Heavy alcohol drinker",
   alch_drinks_per_week = "Drinks per week",
+  kcal_plaus = "Energy intake, kcal/d",
   educ_isced.lab="Education Level", income_level.lab = "Income Level",
-  #sbp_adj="SBP, mmHg (med adjusted)", dbp="DBP, mmHg (med adjusted)",
-  #tg="Triglyceride, mmol/L", ldl="LDL, mmol/L", hdl="HDL, mmol/L", 
+  sbp_adj="SBP, mmHg (med adjusted)", dbp="DBP, mmHg (med adjusted)",
+  tg_fasting_gt6_mgdl="Triglyceride, mg/dL", ldl_fasting_gt6_mgdl="LDL, mg/dL", hdl_fasting_gt6_mgdl="HDL, mg/dL", hba1c = "HbA1c",
   raw_veg_QT="Raw vegetables", coffee_QT="Coffee, cups/day", tea_QT="Tea, cups/day", 
   addsalt_3lvl.lab="Added salt"
   )
@@ -143,9 +147,9 @@ for (i in 1:length(diplo_sets)) {
     var_strata = diplo_strata_var, var_strata_order = c(diplo_strata_order),
     factor_vars = c("smoke_level.lab", "physact_level.lab", "alch_freq.lab",
                     "income_level.lab", "educ_isced.lab", "addsalt_3lvl.lab"),
-    p_print = T, p_adjust = "none", digits = c(1,1,3), data=analysis) %>%
+    p_print = T, p_adjust = "none", digits = c(1,1,3), data=analysis) #%>%
     
-    fwrite(paste0(outDir, "/tab_descr_basic_",diplo_sets[i], ".csv"), row.names = T)
+    #fwrite(paste0(outDir, "/tab_descr_basic_",diplo_sets[i], ".csv"), row.names = T)
 }
 
 ## Additional pairwise comparisons for continuous outcomes 
@@ -155,6 +159,10 @@ summary(lm(alch_drinks_per_week~taste_diplos, data=analysis))$coef
 analysis <- analysis %>% mutate(taste_pav = factor(ifelse(taste_diplos %in% c("AVI/PAV", "PAV/PAV"), "PAV carrier", "AVI/AVI"),
                                                    levels=c("AVI/AVI", "PAV carrier")))
 summary(lm(cigarettes_per_day~taste_pav, data=analysis %>% filter(smoke.lab == "Current")))
+
+#log-transformed TG
+hist(log(analysis$tg_fasting_gt6_mgdl))
+summary(lm(log(tg_fasting_gt6_mgdl)~taste_diplos.num, data=analysis))
 
 
 # ==================================================
@@ -186,7 +194,6 @@ print_summary_table(data=analysis, vars_to_summarize = glucose_vars_mgdl,
 
 ## Outcomes
 glu_vars.l <- list(glu_mgdl = "Glucose, mg/dL", glu2hr_mgdl = "0-2hr Glucose, mg/dL")
-
 names(glu_vars.l) <- c("glu_mgdl", "glu2hr_mgdl")
 
 ## Model covariates
@@ -258,15 +265,6 @@ do.call(rbind.data.frame, lapply(fast_cat.l, function(fast) {
              data = analysis %>% filter(fast_cat == fast)) })) })) %>% 
   write.csv(paste0(outDir, "/tab_res_gluXfast_diplocont_basebmi.csv"), row.names = F)
 
-
-#do.call(rbind.data.frame, lapply(fast_cat_with_6to12, function(fast) {
-#  do.call(rbind.data.frame, lapply(1:length(models.l), function(m) {
-#    print_lm(exposure = "taste_diplos", outcome = "glu_mgdl", label.outcome = paste0(fast, "-Glucose (mg/dL)"), 
-#             label=names(models.nofast.l)[m], covariates = models.nofast.l[[m]], lm_trend = T, 
-#             data = analysis %>% filter(fast_cat_with_6to12 == fast)) })) })) %>% 
-#  write.csv(paste0(outDir, "res_tab_lm_gluXfast12to24_tastediplo_mgdl_",tag,".csv"), row.names = F)
-
-
 ## Interaction in the diet model with Taste x Fasting category
 int_pvals <- sapply(models.l, function(m) {
   anv<-anova(lm(formula(paste0("glu_mgdl~taste_diplos.num*fast_cat+", m)), data=analysis))
@@ -312,18 +310,16 @@ do.call(rbind.data.frame, lapply(fast_cat_with_6to12, function(f) {
 make_pretty_lm(print_lm(exposure="taste_diplos", outcome="glu_mgdl", covariates = models.l$BMI,
          label="Glucose, >= 3 hr", data = analysis %>% filter(fast_cat != "0to2hr")))
 
-#  Outcome            Model Exposure     N              Beta_95CI P_t.test P_f.test P_trend.test
-# glu_mgdl Glucose, >= 3 hr  AVI/AVI 54035                      -        -    0.383        0.629
-# glu_mgdl Glucose, >= 3 hr  AVI/PAV 78481  0.025 (-0.075, 0.124)    0.629        -            -
-# glu_mgdl Glucose, >= 3 hr  PAV/PAV 28520 -0.046 (-0.177, 0.084)    0.485        -            -
-  
-  
 # Continuous
 make_pretty_lm(print_lm(exposure="taste_diplos.num", outcome="glu_mgdl", covariates = models.l$BMI,
          label="Glucose, >= 3 hr", data = analysis %>% filter(fast_cat != "0to2hr")))
 
-#  Outcome            Model         Exposure      N              Beta_95CI P_t.test
-# glu_mgdl Glucose, >= 3 hr taste_diplos.num 161036 -0.016 (-0.079, 0.048)    0.629
+## Estimated marginal mean
+emm_gt3hr <- get_emm.fun(exposure = "taste_diplos", outcome = "glu_mgdl", covars = models.nofast.l$BMI, 
+            label.outcome = "3+hr-Glucose (mg/dL)", label="BMI", reference = "AVI/AVI", 
+              data=analysis %>% filter(fasting_hrs >= 3 & fasting_hrs <= 12))
+emm_gt3hr$emm %>% mutate(fast = "3+hr", .after=model) %>%
+  fwrite("../archive/data/processed/manuscript/tab_sens_emm_glugt3hr_bmi.csv")
 
 
 
@@ -476,9 +472,7 @@ behav_covars.labs <- c(
   alch_daily_rarelynever_BIN = "Daily (vs rarely/never) drink alcohol",
   alch_weekly_rarelynever_BIN = "Weekly (vs rarely/never) drink alcohol",
   alch_monthly_rarelynever_BIN = "Monthly (vs rarely/never) drink alcohol"
-) ; behav_covars.labs %>% saveRDS(paste0(outDir, "/behav_covars_labs.rda"))
-
-
+) ; #behav_covars.labs %>% saveRDS(paste0(outDir, "/behav_covars_labs.rda"))
 
 diet_vars <- c("raw_veg_QT", "cooked_veg_QT", "fresh_fruit_QT", "dried_fruit_QT", 
                "oily_fish_QT", "nonoily_fish_QT", "procmeat_QT", "poultry_QT", 
@@ -501,7 +495,8 @@ model_diet <- paste0(models.nofast.l$BMI, "+", paste0(adj_diet, collapse = "+"))
 model_lifediet <- paste0(model_life, "+", paste0(adj_diet, collapse = "+"))
 
 adj_models <- list("BMI Model\n(Primary)"=models.nofast.l$BMI, "Lifestyle\nAdjusted"=model_life, 
-                   "Diet\nAdjusted"=model_diet, "Lifestyle+Diet\nAdjusted"=model_lifediet)
+                   "Diet\nAdjusted"=model_diet, "Lifestyle+Diet\nAdjusted"=model_lifediet,
+                   "Lifestyle+Diet+\nTotal Energy Adjusted"=paste0(model_lifediet,"+kcal_plaus"))
 
 
 # =============================================================================
@@ -516,7 +511,7 @@ do.call(rbind.data.frame, lapply(2:length(adj_models), function(m) {
   mFull <- lm(formula(paste0("glu2hr_mgdl~", adj_models[[m]] )), data=complete)
   lrt <- lmtest::lrtest(mRed, mFull) ; cbind.data.frame(Model=names(adj_models)[m], pLRT = lrt$`Pr(>Chisq)`[2])
   })) %>% 
-  fwrite(paste0(outDir, "/tab_res_behav_covars_bmi.csv"))
+  fwrite(paste0("../archive/data/processed/manuscript//tab_res_behav_covars_bmi_R1.csv"))
 
 
 # ===========================================================
@@ -550,8 +545,7 @@ do.call(rbind.data.frame, lapply(1:length(adj_models), function(m) {
                    baseR2=mBase$adj.r.squared, tasteR2=mTaste$adj.r.squared,
                    beta=mTaste$coef[2,1], se=mTaste$coef[2,2], p=mTaste$coef[2,4] ) 
   })) %>% 
-  fwrite(paste0(outDir, "/tab_res_glu_diplo_behav.csv"))
-
+  fwrite(paste0("../archive/data/processed/manuscript/tab_res_glu_diplo_behav_R1.csv"))
 
 
 ################################################################################
@@ -568,7 +562,7 @@ behav_covars_sel <- c("tea_QT", "coffee_QT", "addsalt_3lvl.lab", "alch_freq.lab"
 # =============================================================
 
 # load dosage data for bitter snps
-bitter_snps.df <- read.table("../data/processed/bitter_snps.raw", header = T) %>%
+bitter_snps.df <- read.table("../archive/data/processed/bitter_snps.raw", header = T) %>%
   mutate(rs2597979_G = ifelse(rs2597979_G >= 0 & rs2597979_G <0.5, 0, ifelse(rs2597979_G >=0.5 & rs2597979_G < 1.5, 1, 2))) %>%
   select(id=IID, "rs10772420_G", "rs2597979_G") 
 
@@ -577,6 +571,13 @@ analysis <- analysis %>% left_join(bitter_snps.df, by="id")
 bitter_snps <- c("rs713598_G", "rs1726866_G", "rs10246939_C", "rs10772420_A", "rs2597979_G")
 analysis <- analysis %>% mutate(rs10772420_A = 2-rs10772420_G)
 
+
+# =============================================================================
+## R1: Genotype tables
+# =============================================================================
+
+table(analysis$rs2597979_G)
+table(analysis$rs10772420_A)
 
 # =============================================================================
 ## Associations of negative control variants with diet/lifestyle covariates
@@ -627,7 +628,6 @@ emm_bittersnps_glu2hr <- do.call(rbind.data.frame, lapply(bitter_snps_cat, funct
 
 sex.l <- list(c("Female", "Male"))
 
-
 ## NO significanat sex interactions
 summary(lm(formula(paste0("glu2hr_mgdl~taste_diplos.num*sex+", adj_models[[1]])), data=analysis))
 summary(lm(formula(paste0("glu2hr_mgdl~taste_diplos.num*sex+", adj_models[[4]])), data=analysis))
@@ -641,7 +641,6 @@ print_lm(exposure = "taste_diplos", outcome="glu2hr_mgdl", covariates = gsub("[+
          label="Male", data=analysis %>% filter(sex=="Male"))
 
 # Diet+Lifestyle adjusted model ------------------
-
 print_lm(exposure = "taste_diplos", outcome="glu2hr_mgdl", covariates = gsub("[+]sex","", adj_models[[4]]),
          label="Female", data=analysis %>% filter(sex=="Female"))
 print_lm(exposure = "taste_diplos", outcome="glu2hr_mgdl", covariates = gsub("[+]sex","", adj_models[[4]]),
@@ -688,6 +687,36 @@ summary(lm(glu2hr_mgdl~diplo_pav, data=analysis %>% filter(sex=="Female")))
 summary(lm(formula(paste0("glu2hr_mgdl~diplo_pav+", gsub("[+]sex","", adj_models[[1]]) )), 
            data=analysis %>% filter(sex=="Female"))) 
   # R2: 7.446e-05,	Adj R2: 4.251e-05 ; F-statistic: 2.33 ; p-value: 0.1269
+
+
+################################################################################
+## Added after first round of review: Age and BMI-stratified exploratory analyses
+################################################################################
+
+# ================================
+## Age: above/below median
+# ================================
+
+analysis <- analysis %>% mutate(age_gtmed = ifelse(age>=57,"gte_57", "lt_57"))
+
+## NO significanat Age interactions (above/below median)
+summary(lm(formula(paste0("glu2hr_mgdl~taste_diplos.num*age_gtmed+", adj_models[[1]])), data=analysis))
+summary(lm(formula(paste0("glu2hr_mgdl~taste_diplos.num*age_gtmed+", adj_models[[4]])), data=analysis))
+
+
+## Age-stratified associations with 0-2hr glucose ------------------
+# BMI model: slight differences in significance but effect estimates in consistent direction & magnitude 
+print_lm(exposure = "taste_diplos", outcome="glu2hr_mgdl", covariates = adj_models[[1]],
+         label="Above 57 years", data=analysis %>% filter(age_gtmed=="gte_57")) ## P=0.02
+print_lm(exposure = "taste_diplos", outcome="glu2hr_mgdl", covariates = adj_models[[1]],
+         label="Below 57 years", data=analysis %>% filter(age_gtmed=="lt_57")) ## P=0.06
+
+# Diet+Lifestyle adjusted model ------------------
+print_lm(exposure = "taste_diplos", outcome="glu2hr_mgdl", covariates = adj_models[[4]],
+         label="Above 57 years", data=analysis %>% filter(age_gtmed=="gte_57"))
+print_lm(exposure = "taste_diplos", outcome="glu2hr_mgdl", covariates = adj_models[[4]],
+         label="Below 57 years", data=analysis %>% filter(age_gtmed=="lt_57"))
+
 
 
 ##EOF
