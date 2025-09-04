@@ -17,16 +17,18 @@ supertaster_snps = txt file with the three TAS2R38 snps (touch/vim: rs713598\nrs
 # Prepare ukb phenotypes
 qsub ../scripts/data_prep/prep_ukb_phenos.sh
 
-# Run haplotype phasing
-qsub ../scripts/data_prep/phasing.sh
+# Run haplotype phasing + postprocessing to prepare haplotypes
+qsub ../scripts/phasing/phasing.sh
+qsub ../scripts/phasing/postprocess_phasing.sh
 
-# Run postprocessing to prepare haplotypes & analytical dataset (phenotypes + genotypes)
-qsub ../scripts/data_prep/postprocess_phasing.sh
+# Run postprocessing to prepare analytical dataset (merge phenotypes + genotypes)
 qsub ../scripts/data_prep/postprocess_ukb_data.sh
 
 # Grab additional bitter SNPs (for negative control analyses)
 qsub ../scripts/data_prep/get_bittersnps.sh 
 
+# Bring down data file to run statistical analyses & generate figures in local R 
+rsync -zavP $florezlab_taste2d/data/processed/ukb_analysis_ms.rda ../data/processed/
 
 # Primary association analyses 
 Rscript --vanilla ../scripts/analysis/run_primary_ms.R

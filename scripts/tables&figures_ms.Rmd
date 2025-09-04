@@ -14,7 +14,7 @@ lapply(c("tidyverse", "data.table", "paletteer", "ggpubr", "ggtext", #"gplots", 
          "xtable", "knitr", "tinytex", "emmeans", "ComplexHeatmap"),  library, character.only = TRUE)
 
 taste2d_dir <- "~/Documents/GitHub/taste2d/run/"
-outDir <- "../../archive/data/processed/manuscript/"
+outDir <- "..//data/processed/manuscript/"
 
 lapply(list.files(paste0(taste2d_dir, "../../pantry/functions/"), full.names = T), source)
 ```
@@ -34,16 +34,15 @@ diplo_palette <- c(palettes$NatMainBackground2$Level4[2:1],
                   palettes$NatMainBackground2$Level2[1], "grey80")  
 names(diplo_palette) <- paste(c("Nontaster", "Taster", "Supertaster", "Non-canonical"), "diplotype")
 snpdose_palette <- c(rgb2hex(170,196,226), rgb2hex(120,131,186), rgb2hex(96,108,158))
-```
 
-```{r}
+## TAS2R38 diplotype labels
 taste_diplos.labs <- c("AVI/AVI", "AVI/PAV", "PAV/PAV")
 taste_diplos <- c("AVI/AVI", "AVI/PAV", "PAV/PAV")
 taste_diplos_005.labs <- c(taste_diplos.labs, "AVI/AAV", "AAV/PAV")
 ```
 
 
-## **Figure 1.** Distribution of TAS2R38 Haplotypes & Diplotypes 
+## Fig. 1. Distribution of TAS2R38 Haplotypes & Diplotypes 
 
 ```{r, error=F, message=F, fig.height==4, fig.width=6}
 # ================================
@@ -121,8 +120,8 @@ plot_haplo_diplo_AA <- ggarrange(
   widths=c(0.75, 0.05, 1), align = c("hv"), labels=c("A", "", "B")
   )
 
-plot_haplo_diplo_AA %>% ggsave(filename=paste0(taste2d_dir, "../manuscript/output/fig_descr_genodistrib_panel.pdf"), 
-                               height=3.75, width=9.15)
+plot_haplo_diplo_AA %>%
+  ggsave(filename=paste0(taste2d_dir, "../manuscript/output/fig1_GenoDistribution.pdf"), height=3.75, width=9.15)
 ```
 
 
@@ -137,22 +136,22 @@ table1 %>% kable(caption="Descriptive Table 1")
 # Categorical diplotype
 tab_glu_diplocat <- rbind.data.frame(
   make_pretty_lm(fread(paste0(taste2d_dir,"../data/processed/manuscript/tab_res_rg_diplocat_basebmi.csv"))), 
-  make_pretty_lm(fread(paste0(taste2d_dir,"../data/processed/manuscript/tab_res_2hg_diplocat_basebmi.csv"))) 
-  ) #%>% fwrite(paste0(taste2d_dir,"../manuscript/output/tab_res_glu_diplocat_basebmi.csv"))
+  make_pretty_lm(fread(paste0(taste2d_dir,"../data/processed/manuscript/tab_res_2hg_diplocat_basebmi.csv"))))
 
 # Continuous diplotype
 tab_glu_diplocont <- rbind.data.frame(
   make_pretty_lm(fread(paste0(taste2d_dir,"../data/processed/manuscript/tab_res_rg_diplocont_basebmi.csv"))), 
   make_pretty_lm(fread(paste0(taste2d_dir,"../data/processed/manuscript/tab_res_2hg_diplocont_basebmi.csv"))) 
-  ) %>% mutate(P_f.test = "-", P_trend.test = "-") #%>% fwrite(paste0(taste2d_dir,"../manuscript/output/tab_res_glu_diplocat_basebmi.csv"))
+  ) %>% mutate(P_f.test = "-", P_trend.test = "-") 
 
 tas2r38_lvls <- c("TAS2R38 diplotype, per PAV haplotype", "AVI/AVI","AVI/PAV","PAV/PAV")
 
+# Combined table for manuscript output
 rbind.data.frame(tab_glu_diplocat, tab_glu_diplocont) %>%
   mutate_at("Exposure", ~factor(gsub("taste_diplos.num", "TAS2R38 diplotype, per PAV haplotype", .),levels=tas2r38_lvls)) %>%
   mutate_at("Outcome",~factor(., levels=c("Glucose (mg/dL)", "0-2hr Glucose (mg/dL)"))) %>%
   arrange(Outcome, desc(Model), Exposure) %>%
-  fwrite(paste0(taste2d_dir, "../manuscript/output/tab_res_glu_diplo_basebmi_print.csv"))
+  fwrite("../../data/processed/manuscript/tab_DiploGlu_mBaseBmi_print_table1.csv")
 ```
 
 ##### **Supplementary Table.** Associations of TAS2R38 diplotype with glucose levels at subsequent fasting windows
@@ -169,7 +168,7 @@ tab_gluXfast_diplocont <- make_pretty_lm(
 rbind.data.frame(tab_gluXfast_diplocat, tab_gluXfast_diplocont) %>%
   mutate_at("Exposure", ~factor(gsub("taste_diplos.num", "TAS2R38 diplotype, per PAV haplotype", .),levels=tas2r38_lvls)) %>%
   arrange(Outcome, desc(Model), Exposure) %>%
-  fwrite(paste0(taste2d_dir, "../manuscript/output/tab_res_glu_diploXfast_bmi_print.csv"))
+  fwrite("../../data/processed/manuscript/tab_DiploXfastGlu_mBmi_print_tableS5.csv")
 
 ```
 
@@ -202,6 +201,7 @@ fig2_ggtheme <- theme(
 ) 
 
 taster_palette <- diplo_palette[1:3] ; names(taster_palette) <- taste_diplos
+
 # ===========================================================
 ## Panel A: EMM glucose by TAS2R38 at each fasting interval 
 # ===========================================================
@@ -210,9 +210,9 @@ taster_palette <- diplo_palette[1:3] ; names(taster_palette) <- taste_diplos
 
 # note: onlhy include up to 6-12 hr, b/c of variability in 12-24 range
 emm_glu_mgdl_bmi <- rbind.data.frame(
-  read.csv(paste0("../../archive/data/processed/manuscript/tab_res_emm_glu_diplo_bmi.csv")) %>%
+  read.csv(paste0("../../data/processed/manuscript/tab_res_emm_glu_diplo_bmi.csv")) %>%
     mutate(fast = "Random", .after=model), 
-  read.csv(paste0("../../archive/data/processed/manuscript/tab_res_emm_gluXfast_6to12_diplo_bmi.csv"))
+  read.csv(paste0("../../data/processed/manuscript/tab_res_emm_gluXfast_6to12_diplo_bmi.csv"))
 ) ; emm_glu_mgdl_bmi
 
 
@@ -241,7 +241,7 @@ panelA <- emm_glu_mgdl_bmi %>%
 # ==============================================
 
 ## Load in data --------------------
-emm_tas2r38snps_glu2hr <- read.csv(paste0(taste2d_dir, outDir, "/tab_sens_emm_gluXfast_tas2r38snps_bmi.csv"))
+emm_tas2r38snps_glu2hr <- fread("../../data/processed/manuscript/tab_sens_emm_gluXfast_tas2r38snps_bmi.csv")
 
 tas2r38_snps_cat <- paste0(tas2r38_snps, ".cat")
 snps_fancy <- c("rs713598 (C>G)", "rs1726866 (G>A)", "rs10246939 (T>C)")
@@ -292,13 +292,13 @@ study_palette <- c(UKBB=as.vector(diplo_palette)[3], MAGIC=rgb2hex(192,65,64))
 # Load in data --------------------
 
 # variant-level associations in UKB
-snps_glu_bmi_ukb <- fread(paste0(taste2d_dir, outDir, "/tab_res_2hg_tas2r38snps_bmi.csv")) %>%
+snps_glu_bmi_ukb <- fread("../../data/processed/manuscript/tab_res_2hg_tas2r38snps_bmi.csv") %>%
   mutate(snp = c("rs713598 (C>G)", "rs1726866 (G>A)", "rs10246939 (T>C)")) %>%
   mutate(Study="UKBB (0-2hr)") %>%
   select(Study, snp, beta, se, p)
 
 # variant-level associations in MAGIC (independent replication)
-snps_glu_bmi_magic <- fread(paste0(taste2d_dir, outDir, "/tab_repl_glu_tas2r38_magic.csv")) %>%
+snps_glu_bmi_magic <- fread("../../data/processed/manuscript/tab_repl_glu_tas2r38_magic.csv") %>%
   mutate(Study = "MAGIC (2-hr\nOGTT)") %>%
   select(Study, snp=SNP, beta=Beta, se=SE, p=P_value) %>%
   mutate(across(c("beta", "se"), ~.*18.018)) %>%
@@ -370,7 +370,7 @@ Fig2_allpanels
 ## Panel A: TAS2R38 associations with behavioral covariates
 # ===========================================================
 
-panelA.supp <-  fread(paste0(outDir, "/tab_sens_behavcovars_diplo_bmi.csv"))  %>%
+panelA.supp <-  fread("../../data/processed/manuscript//tab_sens_behavcovars_diplo_bmi.csv")  %>%
   arrange(beta) %>%
    mutate(Color=ifelse(as.numeric(p) < .05 & beta<0, "A",
                       ifelse(p>0.05 & beta<0, "B", 
@@ -408,7 +408,7 @@ panelA.supp <-  fread(paste0(outDir, "/tab_sens_behavcovars_diplo_bmi.csv"))  %>
 ## Panel B: Association of behavioral covars with 0-2 hr glucose 
 # ==================================================================
 
-panelB.supp <- fread(paste0(outDir, "/tab_sens_glu2hr_behavcovars_bmi.csv")) %>%
+panelB.supp <- fread("../../data/processed/manuscript//tab_sens_glu2hr_behavcovars_bmi.csv") %>%
   mutate(Diet=model) %>%
   mutate(logp=-log10(p)) %>%
   mutate(Color=ifelse(beta<0 & p<.05, "A",
@@ -447,12 +447,12 @@ panelB.supp <- fread(paste0(outDir, "/tab_sens_glu2hr_behavcovars_bmi.csv")) %>%
 
 ggarrange(panelA.supp, "", panelB.supp, widths=c(1.65, 0.05, 1.15),nrow=1, 
           labels = c("", "", ""), common.legend = T, legend = "bottom") %>% 
-  ggsave(filename=paste0("../output/fig_suppl_behav_covars_R1.pdf"), height=3.5, width=8) 
+  ggsave(filename=paste0("../../data/processed/manuscript/output/fig_suppl_behav_covars_R1_figS2.pdf"), height=3.5, width=8) 
 
 ```
 
 
-#### **Figure 3.** Plot of behaviorally-independent associations, adjusting for dietary and lifestyle habits
+#### Figure 3.Plot of behaviorally-independent associations, adjusting for dietary and lifestyle habits
 ```{r}
 ## Set ggthemes for Figure 3 --------------------
 fig3_theme <- theme(
@@ -481,8 +481,8 @@ fig3_legend <- theme(
 # ================================================
 
 covar_qual <- left_join(
-  fread(paste0("../../archive/data/processed/manuscript/tab_res_glu_diplo_behav.csv")), 
-  fread(paste0("../../archive/data/processed/manuscript/tab_res_behav_covars_bmi.csv")),
+  fread(paste0("../../data/processed/manuscript/tab_res_glu_diplo_behav.csv")), 
+  fread(paste0("../../data/processed/manuscript/tab_res_behav_covars_bmi.csv")),
   by="Model")
 
 ## Carried over from run_primary_ms
@@ -542,10 +542,10 @@ names(bitter_snps.labs) <- bitter_snps
 behav_covars_sel <- c("tea_QT", "coffee_QT", "addsalt_3lvl.lab", "alch_freq.lab", "cereal_intake_QT", 
                       "spread_type_butter_vs_any_other_BIN", "bread_type_white_vs_brown_or_whole_BIN", 
                       "fresh_fruit_QT", "procmeat_QT")
-behav_covars.labs <- readRDS(paste0("../../archive/data/processed/manuscript/behav_covars_labs.rda"))
+behav_covars.labs <- readRDS(paste0("../../data/processed/manuscript/behav_covars_labs.rda"))
 
 # Read in associations
-negcntrl_behav <- fread(paste0("../../archive/data/processed/manuscript/tab_sens_dietlife_negcntrl_snps_bmi.csv")) %>%
+negcntrl_behav <- fread(paste0("../../data/processed/manuscript/tab_sens_dietlife_negcntrl_snps_bmi.csv")) %>%
   rename(SNP=exposure, behav=outcome) %>%
   filter(behav %in% behav_covars_sel)
 
@@ -584,9 +584,9 @@ panelC <- negcntrl_behav %>%
 bitter_snps_cat <- paste0(bitter_snps, ".cat")
 
 # Lod in data
-emm_snps_glu2hr <- fread(paste0("../../archive/data/processed/manuscript/tab_sens_emm_gluXfast_tas2r38snps_bmi.csv"))
+emm_snps_glu2hr <- fread(paste0("../../data/processed/manuscript/tab_sens_emm_gluXfast_tas2r38snps_bmi.csv"))
 emm_snps_glu2hr <- emm_snps_glu2hr %>% 
-  mutate(model=Model) %>%
+  #mutate(model=Model) %>%
   filter(Model=="Lifestyle+Diet")
 
 
@@ -664,67 +664,7 @@ ggarrange(
   ggarrange(panelA, panelB, ncol=1, align="v", labels=c("A","B")),
   ggarrange(panelC, panelD, ncol=1, heights=c(2,1.25), labels=c("C","D")), 
   ncol=2, widths=c(0.75,1.25), align="h"
-) #%>% ggsave(filename="../output/manuscript/plot_figure3_v2.pdf", height=5, width=8)
+) #%>% ggsave(filename="../data/processed/manuscript/output/plot_figure3_v2.pdf", height=5, width=8) ##NOT RUN
 ```
-
-```{r}
-## Build Graphical abstract plot
-emm_glu_mgdl_bmi 
-emm_glu_gt3hr <- fread("../../archive/data/processed/manuscript/tab_sens_emm_glugt3hr_bmi.csv")
-
-# Create emm data frame
-emm_glu_graphabs <- rbind.data.frame(emm_glu_mgdl_bmi %>% filter(fast == "0to2hr"), emm_glu_gt3hr)
-
-## Make figure
-pdf("../../archive/output/manuscript/fig_graphabs_v1.pdf", height=3, width=5)
-emm_glu_graphabs %>% 
-  mutate(fast=factor(fast, levels=rev(c("3+hr", "0to2hr")), labels=rev(c("3-12 hr\nsince last meal", "0-2 hr\nsince last meal\n (i.e.,'postprandial')"))),
-         Diplotypes = factor(level, levels=c("AVI/AVI", "AVI/PAV", "PAV/PAV"))) %>%
-  mutate(type = factor(ifelse(fast=="Anytime from\n0-12 hrs", "Random", "Fasting"), levels=c("Random", "Fasting"))) %>%
-  ggplot(aes(y=emmean, x=fast, ymin=lowCI, ymax=upCI, color=Diplotypes)) + 
-  #facet_grid(~type, scale="free", space="free_x", labeller = as_labeller(c("Random" = "Random Glucose", "Fasting"="Glucose by Self-Reported Fasting Time"))) +
-  #facet_grid(~type, scale="free", space="free_x", labeller = as_labeller(c("Random" = "", "Fasting"=""))) +
-  scale_y_continuous(limits=c(87.5, 90), breaks=seq(87.5,90,0.5)) +
-  geom_point(size=2.75, position=position_dodge(0.25)) + 
-  geom_errorbar(width=0.15, position=position_dodge(0.25), linewidth=0.65) + 
-  scale_color_manual(values=taster_palette, name="**_TAS2R38_ Diplotype**") +
-  ylab("Blood glucose level (mg/dL)\n") + xlab("Self-reported fasting time") + 
-  theme_classic() +
-  theme(
-  axis.title.x = element_blank(), #element_text(size=12, vjust=-1), 
-  axis.title.y = element_text(size=10, face="bold", vjust=-2), 
-  axis.text.x = element_text(size=11,  color="black"), 
-  axis.text.y = element_text(size=9),
-  panel.grid.major.y = element_line(linewidth = 0.25),
-  legend.position = "inside",
-  legend.title = element_markdown(face="bold", size=10, margin = margin(0,0,2.5,0)), #element_text(face="bold", size=9),
-  legend.text = element_text(size=10, face="italic"), #legend.title=element_blank(),
-  legend.position.inside = c(0.85, 0.95),  # Moves legend to top-right inside plot
-  legend.justification.inside = c(1, 1),  # Aligns legend's top-right corner
-  legend.background = element_rect(fill = "white", color = "black", linewidth=0.35),
-  legend.key.size = unit(0.95, 'line')) 
-dev.off()
-
-  strip.background = element_blank(), 
-  panel.grid.minor = element_blank(),
-  panel.grid.major.x = element_blank(),
-  panel.background = element_rect(fill="#00000000"),
-  strip.text = element_text(face="bold", size=8), 
-        
-          
-  legend.margin = margin(2,2,2,2, unit="pt"),
-  plot.margin=margin(1,4,1,1, unit="line")
-) 
-
-# Categorical 
-
-
-make_pretty_lm(print_lm(exposure="taste_diplos", outcome="glu_mgdl", covariates = models.l$BMI,
-         label="Glucose, >= 3 hr", data = analysis %>% filter(fast_cat != "0to2hr")))
-
-#
-
-```
-
 
 ##EOF
